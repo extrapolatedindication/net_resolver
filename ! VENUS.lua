@@ -4362,15 +4362,11 @@ local function calculate_advanced_backtrack_score(record, entity_index)
     local my_eye_pos = client.eye_position()
     if my_eye_pos and record.origin then
         -- Use hitbox head if available
-        local hx, hy, hz
-        if entity.hitbox_position then
-            local ok, x, y, z = pcall(entity.hitbox_position, entity_index, 0)
-            if ok and x then hx, hy, hz = x, y, z end
-        end
+        local head = get_hitbox_center(entity_index, 0)
         local target_head = {
-            x = hx or record.origin.x,
-            y = hy or record.origin.y,
-            z = hz or (record.origin.z + 64)
+            x = head.x ~= 0 and head.x or record.origin.x,
+            y = head.y ~= 0 and head.y or record.origin.y,
+            z = head.z ~= 0 and head.z or (record.origin.z + 64)
         }
         
         local distance = vector_distance(my_eye_pos, target_head)
@@ -5248,15 +5244,11 @@ function should_use_backtrack(entity_index)
     local target_origin = {entity_get_prop(entity_index, "m_vecOrigin")}
     if not target_origin[1] then return false end
     
-    local hx, hy, hz
-    if entity.hitbox_position then
-        local ok, x, y, z = pcall(entity.hitbox_position, entity_index, 0)
-        if ok and x then hx, hy, hz = x, y, z end
-    end
+    local head = get_hitbox_center(entity_index, 0)
     local target_head = {
-        x = hx or target_origin[1],
-        y = hy or target_origin[2],
-        z = hz or (target_origin[3] + 64)
+        x = head.x ~= 0 and head.x or target_origin[1],
+        y = head.y ~= 0 and head.y or target_origin[2],
+        z = head.z ~= 0 and head.z or (target_origin[3] + 64)
     }
     
     -- FOV calculation
@@ -6292,6 +6284,19 @@ local function on_round_start()
     lag_records = {}
     debug_logs = {}
     debug_log("[RESOLVER] Round start - Data reset")
+end
+
+-- Safe hitbox center (fallbacks to origin + 64 for head)
+local function get_hitbox_center(entity_index, hitbox_id)
+    hitbox_id = hitbox_id or 0
+    if entity.hitbox_position then
+        local ok, x, y, z = pcall(entity.hitbox_position, entity_index, hitbox_id)
+        if ok and x then
+            return {x = x, y = y, z = z}
+        end
+    end
+    local ox, oy, oz = entity_get_origin(entity_index)
+    return {x = ox or 0, y = oy or 0, z = (oz or 0) + (hitbox_id == 0 and 64 or 48)}
 end
 
 -- Enhanced FOV system for target selection  
