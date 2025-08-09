@@ -785,7 +785,6 @@ local function calculate_angle(from, to)
     
     return normalize_angle_safe(yaw), normalize_angle_safe(pitch)
 end
-
 -- Advanced statistical analysis for pattern recognition
 local function calculate_entropy(data)
     if not data or #data == 0 then return 0 end -- Добавлена проверка на nil и пустой массив
@@ -1384,7 +1383,6 @@ local function wide_jitter_detection(entity_index, angle_history)
     jitter_cache[cache_key] = {timestamp = current_time, result = jitter_result}
     return jitter_result
 end
-
 -- === ULTRA ENHANCED RIPTIDE CORRECTION SYSTEM V4 ===
 local function riptide_correction(animlayers, velocity, player_state, quantum_state, network_data, entity_index)
     if not animlayers or not velocity or not player_state then
@@ -1968,7 +1966,6 @@ local function riptide_correction(animlayers, velocity, player_state, quantum_st
         
     return correction_result
 end
-
 -- === IMPROVED AISETPOS DIRECTION PREDICTION ===
 -- Улучшенное предсказание направления для aisetpos
 local function enhanced_direction_prediction(entity_index, data, current_record, player_state, velocity_data)
@@ -3819,7 +3816,6 @@ local function analyze_backtrack_records(entity_index)
                 -- === WIDE JITTER DETECTION SCORING INTEGRATION ===
                 -- Apply jitter-specific scoring modifiers to backtrack records
                 local jitter_score_modifier = 0
-                
                 if backtrack_jitter_analysis.is_wide_jitter then
                     -- Base jitter detection bonus
                     jitter_score_modifier = backtrack_jitter_analysis.confidence * 200
@@ -4570,7 +4566,6 @@ local function apply_backtrack_to_target(entity_index, record)
     
     return success
 end
-
 -- === BACKTRACK LEARNING SYSTEM ===
 local function update_backtrack_learning(entity_index, shot_hit, record_used)
     local player_data_entry = player_data[entity_index]
@@ -5362,7 +5357,6 @@ client.set_event_callback("paint", function()
         last_auto_adjust = current_time
     end
 end)
-
 -- === NEURAL FEATURE EXTRACTION SYSTEM ===
 local function extract_neural_features(entity_index)
     local features = {}
@@ -5511,6 +5505,11 @@ local function resolve_aisetpos(entity_index)
     local current_record = records[1]
     local velocity_data = vector_new(entity_get_prop(entity_index, "m_vecVelocity"))
     
+    -- Ensure direction memory exists
+    if not data.direction_memory then
+        data.direction_memory = { last_directions = {}, left_count = 0, right_count = 0, stability = 0.5 }
+    end
+    
     -- Get network state
     local network_info = network_channel_system:get_network_info()
     local network_quality = network_channel_system:analyze_connection_quality(network_info)
@@ -5572,7 +5571,10 @@ local function resolve_aisetpos(entity_index)
     
     -- Calculate base desync
     local resolved_yaw = current_record.angles.y
-    local base_desync = 30 -- Dynamic base value
+    local base_desync = analyze_desync_angle(entity_index)
+    if base_desync == nil or base_desync <= 0 then
+        base_desync = 25
+    end
     
     -- Apply jitter analysis
     if jitter_analysis.is_wide_jitter then
@@ -5715,7 +5717,7 @@ local function resolve_aisetpos(entity_index)
         debug_log(string.format(
             "[AISETPOS-V4] %s | Yaw: %.1f° | Desync: %.1f° | Quality: %.2f | Network: %.2f | Latency: %.1fms",
             player_name,
-            normalize_angle(resolved_yaw),
+            normalize_angle_safe(resolved_yaw),
             base_desync,
             data.performance_metrics.resolution_quality,
             network_quality and network_quality.score or 1.0,
@@ -5723,7 +5725,7 @@ local function resolve_aisetpos(entity_index)
         ))
     end
     
-    return resolved_yaw
+    return normalize_angle_safe(safe_number(resolved_yaw, current_record.angles.y or 0))
 end
     
 -- === IMPROVED LC RESOLVER ===
@@ -6156,7 +6158,6 @@ local function extract_neural_features(entity_index)
     
     return features
 end
-
 -- Enhanced cubic spline interpolation
 local function cubic_spline_interpolation(points, target_time)
     if #points < 4 then
