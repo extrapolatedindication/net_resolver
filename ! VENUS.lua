@@ -6079,10 +6079,21 @@ local function resolve_aisetpos(entity_index)
             local ry = math_rad(normalize_angle_safe(resolved_yaw + base_desync))
             local lpos = {x = hx + math_cos(ly) * off, y = hy + math_sin(ly) * off, z = hz}
             local rpos = {x = hx + math_cos(ry) * off, y = hy + math_sin(ry) * off, z = hz}
-            local tl = client.trace_line(ex1, ey1, ez1, lpos.x, lpos.y, lpos.z, entity_index)
-            local tr = client.trace_line(ex1, ey1, ez1, rpos.x, rpos.y, rpos.z, entity_index)
-            local fl = type(tl) == 'number' and tl or (tl and tl.fraction) or 1
-            local fr = type(tr) == 'number' and tr or (tr and tr.fraction) or 1
+            local fl, fr = 0, 0
+            local ok_l, tb_l = pcall(function()
+                return client.trace_bullet(entity_get_local_player(), ex1, ey1, ez1, lpos.x, lpos.y, lpos.z, entity_index)
+            end)
+            local ok_r, tb_r = pcall(function()
+                return client.trace_bullet(entity_get_local_player(), ex1, ey1, ez1, rpos.x, rpos.y, rpos.z, entity_index)
+            end)
+            if ok_l and tb_l then fl = tb_l.fraction or 0 end
+            if ok_r and tb_r then fr = tb_r.fraction or 0 end
+            if fl == 0 and fr == 0 then
+                local tl = client.trace_line(ex1, ey1, ez1, lpos.x, lpos.y, lpos.z, entity_index)
+                local tr = client.trace_line(ex1, ey1, ez1, rpos.x, rpos.y, rpos.z, entity_index)
+                fl = type(tl) == 'number' and tl or (tl and tl.fraction) or 1
+                fr = type(tr) == 'number' and tr or (tr and tr.fraction) or 1
+            end
             if math_abs(fl - fr) > 0.05 then
                 direction = (fr > fl) and 1 or -1
             end
