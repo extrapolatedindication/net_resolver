@@ -131,6 +131,7 @@ end
 function compute_freestand_bias(entity_index)
     local lp = entity_get_local_player()
     if not lp then return {dir = 0, confidence = 0} end
+
     local ex, ey, ez = entity_get_origin(entity_index)
     local lx, ly, lz = entity_get_origin(lp)
     if not ex or not lx then return {dir = 0, confidence = 0} end
@@ -142,17 +143,31 @@ function compute_freestand_bias(entity_index)
     local left = {x = head.x + math.cos(yaw_rad) * offset, y = head.y + math.sin(yaw_rad) * offset, z = head.z}
     local right = {x = head.x - math.cos(yaw_rad) * offset, y = head.y - math.sin(yaw_rad) * offset, z = head.z}
 
-    local eye = client_eye_position()
-    if not eye or not eye[1] then return {dir = 0, confidence = 0} end
-    local ex1, ey1, ez1 = eye[1], eye[2], eye[3]
+    -- Get eye position in both return formats
+    local e1, e2, e3 = client_eye_position()
+    local ex1, ey1, ez1
+    if type(e1) == "number" and type(e2) == "number" and type(e3) == "number" then
+        ex1, ey1, ez1 = e1, e2, e3
+    elseif type(e1) == "table" and e1[1] and e1[2] and e1[3] then
+        ex1, ey1, ez1 = e1[1], e1[2], e1[3]
+    else
+        return {dir = 0, confidence = 0}
+    end
 
-    local tl = client.trace_line(ex1, ey1, ez1, left.x, left.y, left.z, entity_index) or {fraction = 1}
-    local tr = client.trace_line(ex1, ey1, ez1, right.x, right.y, right.z, entity_index) or {fraction = 1}
-    local cover_l = 1 - (tl.fraction or 1)
-    local cover_r = 1 - (tr.fraction or 1)
+    -- Trace API may return a number (fraction). Normalize to fraction value.
+    local frac_l = client_trace_line(ex1, ey1, ez1, left.x, left.y, left.z, entity_index)
+    local frac_r = client_trace_line(ex1, ey1, ez1, right.x, right.y, right.z, entity_index)
+    if type(frac_l) ~= "number" then frac_l = (frac_l and frac_l.fraction) or 1 end
+    if type(frac_r) ~= "number" then frac_r = (frac_r and frac_r.fraction) or 1 end
+
+    local cover_l = 1 - (frac_l or 1)
+    local cover_r = 1 - (frac_r or 1)
 
     local dir = 0
-    if cover_l > cover_r + 0.05 then dir = 1 elseif cover_r > cover_l + 0.05 then dir = -1 end
+    if cover_l > cover_r + 0.05 then dir = 1
+    elseif cover_r > cover_l + 0.05 then dir = -1
+    end
+
     local confidence = math_min(1.0, math_abs(cover_l - cover_r) * 2)
     return {dir = dir, confidence = confidence}
 end
