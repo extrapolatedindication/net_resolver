@@ -4448,14 +4448,28 @@ local function calculate_advanced_backtrack_score(record, entity_index)
             score = score + 40
         end
         
-        -- === RAY TRACING FOR VISIBILITY ===
-        local trace_result = client.trace_line(my_eye_pos, target_head, entity_index)
-        if trace_result and trace_result.hit_entity == entity_index then
-            score = score + 200  -- Strongly prefer direct line of sight
-        elseif trace_result and trace_result.fraction > 0.8 then
-            score = score + 120  -- Prefer mostly visible
+        -- === BULLET TRACE FOR VISIBILITY ===
+        local tr_ok, trb = pcall(function()
+            return client.trace_bullet(entity_get_local_player(), my_eye_pos[1], my_eye_pos[2], my_eye_pos[3], target_head.x, target_head.y, target_head.z, entity_index)
+        end)
+        if tr_ok and trb then
+            if trb.entity == entity_index or (trb.fraction and trb.fraction > 0.9) then
+                score = score + 220
+            elseif trb.fraction and trb.fraction > 0.75 then
+                score = score + 120
+            else
+                score = score - 140
+            end
         else
-            score = score - 120  -- Penalize obstructed records
+            -- fallback
+            local trace_result = client.trace_line(my_eye_pos, target_head, entity_index)
+            if trace_result and trace_result.hit_entity == entity_index then
+                score = score + 200
+            elseif trace_result and trace_result.fraction > 0.8 then
+                score = score + 120
+            else
+                score = score - 120
+            end
         end
     end
     
@@ -6266,9 +6280,9 @@ local function resolve_lc_prediction(entity_index)
     if avg_latency > 0.07 then net_dt = net_dt * 0.8 end
     local ticks_to_predict = math.min(15, math.ceil(net_dt / globals_tickinterval()) + 1)
 
-    -- Network-aware forward prediction (2D + gravity)
+    -- Network-aware forward prediction (2D + gravity) with neck/torso fallback
     local dt = ticks_to_predict * globals_tickinterval()
-    local predicted_origin = vector_new(current_record.origin)
+    local predicted_origin = get_hitbox_center(entity_index, 0)  -- start from head; consider torso if head blocked later
     -- horizontal (lerp 2D for smoother anticipation)
     predicted_origin.x = predicted_origin.x + velocity.x * dt * 0.9
     predicted_origin.y = predicted_origin.y + velocity.y * dt * 0.9
