@@ -2639,8 +2639,14 @@ local function compute_valid_tick_for_record(record)
     local max_window = 0.2 + (avg_latency * 0.5)
     if time_diff > max_window then return nil end
 
-    -- Convert target time to engine tick
-    local tick = math_floor((record.simulation_time + avg_latency) / tick_interval + 0.5)
+    -- Convert target time to engine tick with small jitter buffer
+    local jitter = 0
+    if network_info and network_info.choke then
+        local avg_choke = (network_info.choke.incoming + network_info.choke.outgoing) / 2
+        jitter = math_min(0.02, avg_choke * 0.05)
+    end
+    local target_time = record.simulation_time + avg_latency - jitter
+    local tick = math_floor(target_time / tick_interval + 0.5)
     return tick
 end
 
@@ -2677,7 +2683,7 @@ local function validate_backtrack_record(entity_index, record, prev_record)
         local pos_delta = vector_distance(prev_record.origin, record.origin)
         local vel_mag = 0
         if record.velocity then
-            vel_mag = math.sqrt(record.velocity.x^2 + record.velocity.y^2 + record.velocity.z^2)
+            vel_mag = vec_len2d(record.velocity)
         end
         local dynamic_threshold = 200 + vel_mag * math.max(time_diff, 0.015) * 2
         if pos_delta > dynamic_threshold then
@@ -4387,7 +4393,7 @@ local function calculate_advanced_backtrack_score(record, entity_index)
     
     -- === 3. MOVEMENT PREDICTION SCORING ===
     if record.velocity then
-        local velocity_mag = math.sqrt(record.velocity.x^2 + record.velocity.y^2 + record.velocity.z^2)
+        local velocity_mag = vec_len2d(record.velocity)
         
         -- Stationary targets are easier to hit
         if velocity_mag < 5 then
@@ -4493,7 +4499,7 @@ local function calculate_advanced_backtrack_score(record, entity_index)
         elseif weapon_name:find("ak47") or weapon_name:find("m4a") then
             -- Rifles benefit from movement prediction
             if record.velocity then
-                local vel_mag = math.sqrt(record.velocity.x^2 + record.velocity.y^2 + record.velocity.z^2)
+                local vel_mag = vec_len2d(record.velocity)
                 if vel_mag < 30 then
                     score = score * 1.15
                 end
@@ -4669,7 +4675,7 @@ local function apply_backtrack_to_target(entity_index, record)
 
     if record.velocity and record.backtrack_metadata then
         local time_diff = record.backtrack_metadata.time_diff
-        local velocity_mag = math.sqrt(record.velocity.x^2 + record.velocity.y^2 + record.velocity.z^2)
+        local velocity_mag = vec_len2d(record.velocity)
 
             -- Network-aware forward interpolation (no hard caps)
     local network_info = network_channel_system:get_network_info()
