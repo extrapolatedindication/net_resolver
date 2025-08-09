@@ -4506,22 +4506,42 @@ local function calculate_advanced_backtrack_score(record, entity_index)
             score = score + 40
         end
         
-        -- === BULLET TRACE FOR VISIBILITY === (head then chest fallback)
+        -- === BULLET TRACE FOR VISIBILITY === (prefer bbox face multi-point)
         local function score_target_point(pt)
+            local ox, oy, oz = my_eye_pos[1], my_eye_pos[2], my_eye_pos[3]
             local ok, trb = pcall(function()
-                return client.trace_bullet(entity_get_local_player(), my_eye_pos[1], my_eye_pos[2], my_eye_pos[3], pt.x, pt.y, pt.z, entity_index)
+                return client.trace_bullet(entity_get_local_player(), ox, oy, oz, pt.x, pt.y, pt.z, entity_index)
             end)
             if ok and trb then return trb.fraction or 0 end
-            local tl = client.trace_line(my_eye_pos, pt, entity_index)
+            local tl = client.trace_line(ox, oy, oz, pt.x, pt.y, pt.z, entity_index)
+            if type(tl) == 'number' then return tl end
             return (tl and tl.fraction) or 0
         end
-        local head_frac = score_target_point(target_head)
-        if head_frac < 0.6 then
-            local chest = get_hitbox_center(entity_index, 5)
-            local chest_frac = score_target_point(chest)
-            if chest_frac > head_frac then
-                head_frac = chest_frac
+        local function best_face_visibility(hitbox_id)
+            local bbox = get_hitbox_bbox_via_studio and get_hitbox_bbox_via_studio(entity_index, hitbox_id)
+            if bbox and bbox.mins and bbox.maxs and bbox.center then
+                local cx, cy, cz = bbox.center.x, bbox.center.y, bbox.center.z
+                local mx, my, mz = bbox.mins.x, bbox.mins.y, bbox.mins.z
+                local Mx, My, Mz = bbox.maxs.x, bbox.maxs.y, bbox.maxs.z
+                local pts = {
+                    {x = cx, y = cy, z = cz},
+                    {x = mx, y = cy, z = cz}, {x = Mx, y = cy, z = cz},
+                    {x = cx, y = my, z = cz}, {x = cx, y = My, z = cz},
+                    {x = cx, y = cy, z = mz}, {x = cx, y = cy, z = Mz}
+                }
+                local best = 0
+                for _, p in ipairs(pts) do
+                    local f = score_target_point(p)
+                    if f > best then best = f end
+                end
+                return best
             end
+            return score_target_point(get_hitbox_center(entity_index, hitbox_id))
+        end
+        local head_frac = best_face_visibility(0)
+        if head_frac < 0.6 then
+            local chest_frac = best_face_visibility(5)
+            if chest_frac > head_frac then head_frac = chest_frac end
         end
         if head_frac > 0.9 then
             score = score + 220
@@ -6139,7 +6159,7 @@ local function resolve_aisetpos(entity_index)
         end
     end
 
-    -- Visibility-based validation of chosen side
+    -- Visibility-based validation of chosen side (bbox face multi-point if available)
     do
         local e1, e2, e3 = client.eye_position()
         local ex1, ey1, ez1
@@ -6150,29 +6170,63 @@ local function resolve_aisetpos(entity_index)
         end
         if ex1 then
             local bbox = get_hitbox_bbox_via_studio and get_hitbox_bbox_via_studio(entity_index, 0)
-            local center = (bbox and bbox.center) or get_hitbox_center(entity_index, 0)
-            local off = 10
-            local ly = math_rad(normalize_angle_safe(resolved_yaw - base_desync))
-            local ry = math_rad(normalize_angle_safe(resolved_yaw + base_desync))
-            local lpos = {x = center.x + math_cos(ly) * off, y = center.y + math_sin(ly) * off, z = center.z}
-            local rpos = {x = center.x + math_cos(ry) * off, y = center.y + math_sin(ry) * off, z = center.z}
-            local fl, fr = 0, 0
-            local ok_l, tb_l = pcall(function()
-                return client.trace_bullet(entity_get_local_player(), ex1, ey1, ez1, lpos.x, lpos.y, lpos.z, entity_index)
-            end)
-            local ok_r, tb_r = pcall(function()
-                return client.trace_bullet(entity_get_local_player(), ex1, ey1, ez1, rpos.x, rpos.y, rpos.z, entity_index)
-            end)
-            if ok_l and tb_l then fl = tb_l.fraction or 0 end
-            if ok_r and tb_r then fr = tb_r.fraction or 0 end
-            if fl == 0 and fr == 0 then
-                local tl = client.trace_line(ex1, ey1, ez1, lpos.x, lpos.y, lpos.z, entity_index)
-                local tr = client.trace_line(ex1, ey1, ez1, rpos.x, rpos.y, rpos.z, entity_index)
-                fl = type(tl) == 'number' and tl or (tl and tl.fraction) or 1
-                fr = type(tr) == 'number' and tr or (tr and tr.fraction) or 1
-            end
-            if math_abs(fl - fr) > 0.05 then
-                direction = (fr > fl) and 1 or -1
+            if bbox and bbox.mins and bbox.maxs and bbox.center then
+                local function sample_face_points(left)
+                    local pts = {}
+                    local cx, cy, cz = bbox.center.x, bbox.center.y, bbox.center.z
+                    local mx, my, mz = bbox.mins.x, bbox.mins.y, bbox.mins.z
+                    local Mx, My, Mz = bbox.maxs.x, bbox.maxs.y, bbox.maxs.z
+                    if left then
+                        table.insert(pts, {x = mx, y = cy, z = cz})
+                        table.insert(pts, {x = mx, y = My, z = cz})
+                        table.insert(pts, {x = mx, y = my, z = cz})
+                    else
+                        table.insert(pts, {x = Mx, y = cy, z = cz})
+                        table.insert(pts, {x = Mx, y = My, z = cz})
+                        table.insert(pts, {x = Mx, y = my, z = cz})
+                    end
+                    return pts
+                end
+                local function best_frac(pts)
+                    local best = 0
+                    for _, p in ipairs(pts) do
+                        local ok, trb = pcall(function()
+                            return client.trace_bullet(entity_get_local_player(), ex1, ey1, ez1, p.x, p.y, p.z, entity_index)
+                        end)
+                        if ok and trb and trb.fraction and trb.fraction > best then best = trb.fraction end
+                    end
+                    return best
+                end
+                local fl = best_frac(sample_face_points(true))
+                local fr = best_frac(sample_face_points(false))
+                if math_abs(fl - fr) > 0.05 then
+                    direction = (fr > fl) and 1 or -1
+                end
+            else
+                local center = get_hitbox_center(entity_index, 0)
+                local off = 10
+                local ly = math_rad(normalize_angle_safe(resolved_yaw - base_desync))
+                local ry = math_rad(normalize_angle_safe(resolved_yaw + base_desync))
+                local lpos = {x = center.x + math_cos(ly) * off, y = center.y + math_sin(ly) * off, z = center.z}
+                local rpos = {x = center.x + math_cos(ry) * off, y = center.y + math_sin(ry) * off, z = center.z}
+                local fl, fr = 0, 0
+                local ok_l, tb_l = pcall(function()
+                    return client.trace_bullet(entity_get_local_player(), ex1, ey1, ez1, lpos.x, lpos.y, lpos.z, entity_index)
+                end)
+                local ok_r, tb_r = pcall(function()
+                    return client.trace_bullet(entity_get_local_player(), ex1, ey1, ez1, rpos.x, rpos.y, rpos.z, entity_index)
+                end)
+                if ok_l and tb_l then fl = tb_l.fraction or 0 end
+                if ok_r and tb_r then fr = tb_r.fraction or 0 end
+                if fl == 0 and fr == 0 then
+                    local tl = client.trace_line(ex1, ey1, ez1, lpos.x, lpos.y, lpos.z, entity_index)
+                    local tr = client.trace_line(ex1, ey1, ez1, rpos.x, rpos.y, rpos.z, entity_index)
+                    fl = type(tl) == 'number' and tl or (tl and tl.fraction) or 1
+                    fr = type(tr) == 'number' and tr or (tr and tr.fraction) or 1
+                end
+                if math_abs(fl - fr) > 0.05 then
+                    direction = (fr > fl) and 1 or -1
+                end
             end
         end
     end
@@ -6321,24 +6375,25 @@ local function resolve_aisetpos(entity_index)
     return normalize_angle_safe(safe_number(resolved_yaw, current_record.angles.y or 0))
 end
     
--- Hitbox face points (early helper) using bones basis or fallback
+-- Hitbox face points (prefer studiohdr bbox faces; fallback to bone basis)
 local function get_hitbox_face_points(entity_index, hitbox_id)
     hitbox_id = hitbox_id or 0
-    -- center via hitbox_position
-    local cx, cy, cz
-    if entity.hitbox_position then
-        local ok, x, y, z = pcall(entity.hitbox_position, entity_index, hitbox_id)
-        if ok and x then cx, cy, cz = x, y, z end
+    local bbox = get_hitbox_bbox_via_studio and get_hitbox_bbox_via_studio(entity_index, hitbox_id)
+    if bbox and bbox.mins and bbox.maxs and bbox.center then
+        local cx, cy, cz = bbox.center.x, bbox.center.y, bbox.center.z
+        local mx, my, mz = bbox.mins.x, bbox.mins.y, bbox.mins.z
+        local Mx, My, Mz = bbox.maxs.x, bbox.maxs.y, bbox.maxs.z
+        return {
+            {x=cx,y=cy,z=cz},
+            {x=mx,y=cy,z=cz},{x=Mx,y=cy,z=cz},
+            {x=cx,y=my,z=cz},{x=cx,y=My,z=cz},
+            {x=cx,y=cy,z=mz},{x=cx,y=cy,z=Mz},
+            {x=mx,y=my,z=cz},{x=Mx,y=My,z=cz},{x=mx,y=My,z=cz},{x=Mx,y=my,z=cz}
+        }
     end
-    if not cx then
-        local ox, oy, oz = entity.get_origin(entity_index)
-        cx, cy, cz = ox or 0, oy or 0, (oz or 0) + (hitbox_id == 0 and 64 or 48)
-    end
-    local center = {x = cx, y = cy, z = cz}
-    -- basis via bones (best effort)
-    local bones
-    local ok_b, b = pcall(function() return get_bones_cached and get_bones_cached(entity_index) or nil end)
-    if ok_b then bones = b end
+    -- fallback: bone basis
+    local center = get_hitbox_center(entity_index, hitbox_id)
+    local bones = get_bones_cached and get_bones_cached(entity_index) or nil
     local mat
     if bones and bones[0] then
         for _, bone in ipairs({8,7,6}) do
@@ -6548,6 +6603,11 @@ end
 -- Safe hitbox center (fallbacks to origin + 64 for head)
 local function get_hitbox_center(entity_index, hitbox_id)
     hitbox_id = hitbox_id or 0
+    -- Prefer exact bbox center via studiohdr when available
+    local bbox = get_hitbox_bbox_via_studio and get_hitbox_bbox_via_studio(entity_index, hitbox_id)
+    if bbox and bbox.center then
+        return {x = bbox.center.x, y = bbox.center.y, z = bbox.center.z}
+    end
     -- Fast path via API
     if entity.hitbox_position then
         local ok, x, y, z = pcall(entity.hitbox_position, entity_index, hitbox_id)
@@ -6577,9 +6637,23 @@ end
 
 _G.get_hitbox_center = _G.get_hitbox_center or get_hitbox_center
 
--- Hitbox face points (approx) using bones basis; fallback to ring around center
+-- Hitbox face points (prefer studiohdr bbox faces; fallback to bone basis)
 local function get_hitbox_face_points(entity_index, hitbox_id)
     hitbox_id = hitbox_id or 0
+    local bbox = get_hitbox_bbox_via_studio and get_hitbox_bbox_via_studio(entity_index, hitbox_id)
+    if bbox and bbox.mins and bbox.maxs and bbox.center then
+        local cx, cy, cz = bbox.center.x, bbox.center.y, bbox.center.z
+        local mx, my, mz = bbox.mins.x, bbox.mins.y, bbox.mins.z
+        local Mx, My, Mz = bbox.maxs.x, bbox.maxs.y, bbox.maxs.z
+        return {
+            {x=cx,y=cy,z=cz},
+            {x=mx,y=cy,z=cz},{x=Mx,y=cy,z=cz},
+            {x=cx,y=my,z=cz},{x=cx,y=My,z=cz},
+            {x=cx,y=cy,z=mz},{x=cx,y=cy,z=Mz},
+            {x=mx,y=my,z=cz},{x=Mx,y=My,z=cz},{x=mx,y=My,z=cz},{x=Mx,y=my,z=cz}
+        }
+    end
+    -- fallback: bone basis
     local center = get_hitbox_center(entity_index, hitbox_id)
     local points = {}
     local bones = get_bones_cached and get_bones_cached(entity_index) or nil
