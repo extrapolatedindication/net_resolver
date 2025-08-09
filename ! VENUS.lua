@@ -6109,6 +6109,14 @@ local function resolve_aisetpos(entity_index)
             base_desync = 25
         end
     end
+    -- weapon and movement aware clamp
+    do
+        local weapon = entity_get_player_weapon(entity_get_local_player())
+        local wname = weapon and entity_get_classname(weapon):lower() or 'unknown'
+        local is_smg = wname:find('mp') or wname:find('bizon') or wname:find('p90') or wname:find('ump')
+        local speed2d = vec_len2d(velocity_data)
+        if is_smg and speed2d > 40 then base_desync = math.min(base_desync, 40) end
+    end
     
     -- Apply jitter analysis
     if jitter_analysis.is_wide_jitter then
@@ -6394,10 +6402,15 @@ local function resolve_aisetpos(entity_index)
     data.yaw_history = data.yaw_history or {}
     local prev_yaw = data.yaw_history[1] or resolved_yaw
     local resq = (data.performance_metrics and data.performance_metrics.resolution_quality) or 0.5
-    local t = math_max(0.2, math_min(0.9, 0.2 + resq * 0.6))
-    local smoothed_core = angle_lerp(prev_yaw, resolved_yaw, t)
+    local weapon = entity_get_player_weapon(entity_get_local_player())
+    local wname = weapon and entity_get_classname(weapon):lower() or 'unknown'
+    local is_sniper = wname:find('awp') or wname:find('ssg') or wname:find('scar') or wname:find('g3')
+    local base_t = 0.2 + resq * 0.6
+    if is_sniper then base_t = base_t * 0.85 end  -- чуть менее агрессивное сглаживание для точных выстрелов
+    base_t = math_max(0.15, math_min(0.9, base_t))
+    local smoothed_core = angle_lerp(prev_yaw, resolved_yaw, base_t)
 
-    resolved_yaw = normalize_angle_safe(smoothed_core + time_variance)
+    resolved_yaw = normalize_angle_safe(smoothed_core + time_variance * (is_sniper and 0.5 or 1.0))
 
     table.insert(data.yaw_history, 1, resolved_yaw)
     if #data.yaw_history > 16 then table.remove(data.yaw_history) end
