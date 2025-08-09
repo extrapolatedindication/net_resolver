@@ -4361,10 +4361,16 @@ local function calculate_advanced_backtrack_score(record, entity_index)
     -- === 2. HITBOX ACCURACY SCORING ===
     local my_eye_pos = client.eye_position()
     if my_eye_pos and record.origin then
+        -- Use hitbox head if available
+        local hx, hy, hz
+        if entity.hitbox_position then
+            local ok, x, y, z = pcall(entity.hitbox_position, entity_index, 0)
+            if ok and x then hx, hy, hz = x, y, z end
+        end
         local target_head = {
-            x = record.origin.x,
-            y = record.origin.y,
-            z = record.origin.z + 64  -- Head height
+            x = hx or record.origin.x,
+            y = hy or record.origin.y,
+            z = hz or (record.origin.z + 64)
         }
         
         local distance = vector_distance(my_eye_pos, target_head)
@@ -5242,10 +5248,15 @@ function should_use_backtrack(entity_index)
     local target_origin = {entity_get_prop(entity_index, "m_vecOrigin")}
     if not target_origin[1] then return false end
     
+    local hx, hy, hz
+    if entity.hitbox_position then
+        local ok, x, y, z = pcall(entity.hitbox_position, entity_index, 0)
+        if ok and x then hx, hy, hz = x, y, z end
+    end
     local target_head = {
-        x = target_origin[1],
-        y = target_origin[2],
-        z = target_origin[3] + 64
+        x = hx or target_origin[1],
+        y = hy or target_origin[2],
+        z = hz or (target_origin[3] + 64)
     }
     
     -- FOV calculation
