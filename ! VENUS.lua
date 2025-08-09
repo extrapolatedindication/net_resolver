@@ -3967,6 +3967,7 @@ local function analyze_backtrack_records(entity_index)
                 if temporal_analysis[i] then
                     temporal_analysis[i].ml_score = ml_score
                 end
+                
                 -- === WIDE JITTER DETECTION SCORING INTEGRATION ===
                 -- Apply jitter-specific scoring modifiers to backtrack records
                 local jitter_score_modifier = 0
@@ -5748,6 +5749,13 @@ local function resolve_aisetpos(entity_index)
         on_ground = bit.band(current_record.flags or 0, 1) == 1,
         ducking = current_record.duck_amount and current_record.duck_amount > 0.1
     }, velocity_data)
+
+    -- Freestand bias
+    local freestand = compute_freestand_bias(entity_index)
+    if freestand.confidence > 0.1 then
+        direction_data.final_direction = (freestand.dir ~= 0) and freestand.dir or direction_data.final_direction
+        direction_data.prediction_strength = (direction_data.prediction_strength or 0.5) * (1 + freestand.confidence * 0.2)
+    end
     
     -- Initialize quantum state for advanced prediction
     local quantum_state = {
@@ -5826,11 +5834,27 @@ local function resolve_aisetpos(entity_index)
             end
         end
         
-        -- Force positive correction (requirement)
-        jitter_correction = math.abs(jitter_correction)
-        
-        -- Apply direction with network compensation
-        local direction = direction_data.final_direction
+            -- Force positive correction (requirement)
+    jitter_correction = math.abs(jitter_correction)
+
+    -- Direction smoothing with last decisions
+    data.direction_memory = data.direction_memory or {last_directions = {}}
+    local last_dir = 0
+    if #data.direction_memory.last_directions > 0 then
+        last_dir = data.direction_memory.last_directions[#data.direction_memory.last_directions].direction or 0
+    end
+
+    -- Apply direction with network + freestand compensation
+    local direction = direction_data.final_direction
+    if freestand and freestand.confidence > 0.2 then
+        direction = freestand.dir ~= 0 and freestand.dir or direction
+    end
+    if last_dir ~= 0 and direction ~= last_dir then
+        -- Smooth flips when confidence is low
+        if (direction_data.prediction_strength or 0.5) < 0.6 then
+            direction = last_dir
+        end
+    end
         
         -- Network-based direction adjustment
         if network_info and network_info.network_jitter_detected then
@@ -5930,7 +5954,8 @@ local function resolve_aisetpos(entity_index)
         jitter_confidence = jitter_analysis.confidence,
         network_stability = network_quality and network_quality.score or 1.0,
         packet_correlation = jitter_analysis.packet_correlation or 0,
-        prediction_accuracy = direction_data.prediction_strength or 0.5
+        prediction_accuracy = (direction_data.prediction_strength or 0.5)
+            + (freestand and freestand.confidence or 0) * 0.1
     }
     
     data.performance_metrics.resolution_quality = 
@@ -5946,7 +5971,18 @@ local function resolve_aisetpos(entity_index)
     
     -- Anti-detection variance
     local time_variance = math.sin(globals.curtime() * 1.7 + entity_index) * 1.5
-    resolved_yaw = normalize_angle_safe(resolved_yaw + time_variance)
+
+    -- Gentle EMA smoothing to reduce jitter before variance
+    data.yaw_history = data.yaw_history or {}
+    local prev_yaw = data.yaw_history[1] or resolved_yaw
+    local alpha = 0.2
+    local smoothed_core = normalize_angle_safe((1 - alpha) * prev_yaw + alpha * resolved_yaw)
+
+    resolved_yaw = normalize_angle_safe(smoothed_core + time_variance)
+
+    -- Keep small history
+    table.insert(data.yaw_history, 1, resolved_yaw)
+    if #data.yaw_history > 16 then table.remove(data.yaw_history) end
     
     -- Debug logging
     if riptide_v3_debug and ui.get(riptide_v3_debug) then
@@ -6326,7 +6362,6 @@ local function create_neural_network(config)
     
     return network
 end
-
 -- Enhanced resolver with neural networks
 local enhanced_resolver = {
     neural_networks = {},
