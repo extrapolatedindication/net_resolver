@@ -47,6 +47,35 @@ ffi.cdef[[
     typedef float matrix3x4_t[3][4];
 ]]
 
+ffi.cdef[[
+    typedef struct {
+        int id; int version; int checksum; char name[64]; int length;
+        float eyeposition[3]; float illumposition[3]; float hull_min[3]; float hull_max[3];
+        float view_bbmin[3]; float view_bbmax[3]; int flags; int num_bones; int bone_index;
+        int num_bonecontrollers; int bonecontroller_index; int num_hitboxsets; int hitboxset_index;
+    } studiohdr_t;
+    typedef struct {
+        int sznameindex; int numhitboxes; int hitboxindex;
+    } mstudiohitboxset_t;
+    typedef struct {
+        int m_iBone; int m_iGroup; float bbmin[3]; float bbmax[3]; int szHitboxNameIndex; int m_nPad[3]; float m_flRadius; int m_GroupUnknown;
+    } mstudiobbox_t;
+]]
+
+-- Resolve model header via model info if available
+local function get_studiohdr_for_entity(ent)
+    if entity.get_model and client.get_model_info then
+        local ok, model = pcall(entity.get_model, ent)
+        if ok and model then
+            local ok2, info = pcall(client.get_model_info, model)
+            if ok2 and info and info.studiohdr then
+                return ffi.cast("studiohdr_t*", info.studiohdr)
+            end
+        end
+    end
+    return nil
+end
+
 -- Bones cache per tick
 local bones_cache = { tick = -1, per_entity = {} }
 
@@ -91,6 +120,29 @@ local function transform_point(mat, v)
         x = mat[0][0]*v.x + mat[0][1]*v.y + mat[0][2]*v.z + mat[0][3],
         y = mat[1][0]*v.x + mat[1][1]*v.y + mat[1][2]*v.z + mat[1][3],
         z = mat[2][0]*v.x + mat[2][1]*v.y + mat[2][2]*v.z + mat[2][3]
+    }
+end
+
+local function get_hitbox_bbox_via_studio(ent, hitbox_id)
+    hitbox_id = hitbox_id or 0
+    local hdr = get_studiohdr_for_entity(ent)
+    if not hdr then return nil end
+    local set = ffi.cast("mstudiohitboxset_t*", ffi.cast("uint8_t*", hdr) + hdr.hitboxset_index)
+    if not set or set.numhitboxes <= hitbox_id then return nil end
+    local bbox = ffi.cast("mstudiobbox_t*", ffi.cast("uint8_t*", set) + set.hitboxindex + hitbox_id * ffi.sizeof("mstudiobbox_t"))
+    if not bbox then return nil end
+    local bones = get_bones_cached and get_bones_cached(ent) or nil
+    if not bones then return nil end
+    local bone = bbox.m_iBone or 0
+    local mat = bones[bone]
+    if not mat then return nil end
+    local mins = {x = bbox.bbmin[0], y = bbox.bbmin[1], z = bbox.bbmin[2]}
+    local maxs = {x = bbox.bbmax[0], y = bbox.bbmax[1], z = bbox.bbmax[2]}
+    local center_local = {x = (mins.x + maxs.x)/2, y = (mins.y + maxs.y)/2, z = (mins.z + maxs.z)/2}
+    return {
+        center = transform_point(mat, center_local),
+        mins = transform_point(mat, mins),
+        maxs = transform_point(mat, maxs)
     }
 end
 
