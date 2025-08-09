@@ -2653,10 +2653,42 @@ local function update_lag_records(entity_index)
 
     -- Ensure minimal player_data container exists for valid_records
     if not player_data[entity_index] then
-        player_data[entity_index] = { valid_records = {}, last_valid_record = nil }
+        player_data[entity_index] = {
+            valid_records = {},
+            last_valid_record = nil,
+            shots_fired = 0,
+            shots_hit = 0,
+            shots_missed = 0,
+            performance_metrics = {
+                accuracy = 0,
+                consistency = 0,
+                last_update = 0,
+                resolution_quality = 0.0,
+                hit_probability = 0.5,
+                miss_rate = 0.5,
+                adaptive_success = 0.5,
+                network_correlation_accuracy = 0.5
+            }
+        }
     else
         if not player_data[entity_index].valid_records then
             player_data[entity_index].valid_records = {}
+        end
+        -- Ensure counters exist even if entry was created minimally before
+        player_data[entity_index].shots_fired = player_data[entity_index].shots_fired or 0
+        player_data[entity_index].shots_hit = player_data[entity_index].shots_hit or 0
+        player_data[entity_index].shots_missed = player_data[entity_index].shots_missed or 0
+        if not player_data[entity_index].performance_metrics then
+            player_data[entity_index].performance_metrics = {
+                accuracy = 0,
+                consistency = 0,
+                last_update = 0,
+                resolution_quality = 0.0,
+                hit_probability = 0.5,
+                miss_rate = 0.5,
+                adaptive_success = 0.5,
+                network_correlation_accuracy = 0.5
+            }
         end
     end
 
