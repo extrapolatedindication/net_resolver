@@ -1975,9 +1975,10 @@ local function enhanced_direction_prediction(entity_index, data, current_record,
         adaptation_factor = 0
     }
     
-    -- === МЕТОД 1: ADVANCED PATTERN RECOGNITION ===
+    -- === МЕТОД 1: ADVANCED PATTERN RECOГНИTION ===
     -- Улучшенное распознавание паттернов
-    if #data.desync_history >= 10 then
+    local desync_hist = (data and data.desync_history) or {}
+    if #desync_hist >= 10 then
         local pattern_analysis = {
             jitter_detected = false,
             spin_detected = false,
@@ -1989,8 +1990,8 @@ local function enhanced_direction_prediction(entity_index, data, current_record,
         
         -- Анализ последних 10 значений для паттернов
         local recent_desyncs = {}
-        for i = math_max(1, #data.desync_history - 9), #data.desync_history do
-            table_insert(recent_desyncs, data.desync_history[i])
+        for i = math_max(1, #desync_hist - 9), #desync_hist do
+            table_insert(recent_desyncs, desync_hist[i])
         end
         
         -- Детекция jitter паттерна
