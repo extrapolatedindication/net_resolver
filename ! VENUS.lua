@@ -6460,6 +6460,8 @@ local function get_hitbox_center(entity_index, hitbox_id)
     return {x = ox or 0, y = oy or 0, z = (oz or 0) + (hitbox_id == 0 and 64 or 48)}
 end
 
+_G.get_hitbox_center = _G.get_hitbox_center or get_hitbox_center
+
 -- Hitbox face points (approx) using bones basis; fallback to ring around center
 local function get_hitbox_face_points(entity_index, hitbox_id)
     hitbox_id = hitbox_id or 0
