@@ -6104,10 +6104,16 @@ local function resolve_lc_prediction(entity_index)
     predicted_origin.z = predicted_origin.z + vz * dt
     
         -- Visibility-aware correction: nudge towards nearest visible point
-    local my_eye = client.eye_position()
-    if my_eye and predicted_origin then
-        local ex1, ey1, ez1 = my_eye[1], my_eye[2], my_eye[3]
-        if ex1 then
+    -- Normalize eye position (API may return numbers or table)
+    local e1, e2, e3 = client.eye_position()
+    local ex1, ey1, ez1
+    if type(e1) == "number" and type(e2) == "number" and type(e3) == "number" then
+        ex1, ey1, ez1 = e1, e2, e3
+    elseif type(e1) == "table" and e1[1] and e1[2] and e1[3] then
+        ex1, ey1, ez1 = e1[1], e1[2], e1[3]
+    end
+
+    if ex1 and predicted_origin then
             local tr = client.trace_line(ex1, ey1, ez1, predicted_origin.x, predicted_origin.y, predicted_origin.z, entity_index)
             local frac = tr and (tr.fraction or tr) or 1
             if frac < 0.95 then
