@@ -2540,22 +2540,115 @@ local function create_lag_record(entity_index)
     }
 end
 
+-- === VALIDATE BACKTRACK RECORD (NETWORK- AND STATE-AWARE) ===
+local function validate_backtrack_record(entity_index, record, prev_record)
+    if not record or not record.simulation_time or not record.origin then
+        return { valid = false, reasons = {"missing_fields"} }
+    end
+
+    local reasons = {}
+    local tick = compute_valid_tick_for_record(record)
+    if not tick then
+        table.insert(reasons, "no_valid_tick")
+    end
+
+    local curtime = globals.curtime()
+    local time_diff = curtime - record.simulation_time
+    if time_diff < 0 then
+        table.insert(reasons, "future_time")
+    end
+
+    -- Position sanity vs previous record
+    if prev_record and prev_record.origin then
+        local pos_delta = vector_distance(prev_record.origin, record.origin)
+        local vel_mag = 0
+        if record.velocity then
+            vel_mag = math.sqrt(record.velocity.x^2 + record.velocity.y^2 + record.velocity.z^2)
+        end
+        local dynamic_threshold = 200 + vel_mag * math.max(time_diff, 0.015) * 2
+        if pos_delta > dynamic_threshold then
+            table.insert(reasons, "position_teleport")
+        end
+    end
+
+    -- Animation sanity: require some activity
+    local anim_ok = false
+    if record.animlayers then
+        local active = 0
+        for i = 1, 13 do
+            local layer = record.animlayers[i]
+            if layer and layer.weight and layer.cycle then
+                if (layer.weight > 0.0001) or (layer.cycle > 0 and layer.cycle < 1) then
+                    active = active + 1
+                end
+            end
+        end
+        anim_ok = active >= 1
+    end
+    if not anim_ok then
+        table.insert(reasons, "no_anim_activity")
+    end
+
+    -- Angle jump sanity vs previous
+    if prev_record and prev_record.angles and record.angles then
+        local yaw_jump = math.abs(normalize_angle(record.angles.y - prev_record.angles.y))
+        if yaw_jump > 120 and time_diff < 0.02 then
+            table.insert(reasons, "suspicious_yaw_jump")
+        end
+    end
+
+    local valid = (tick ~= nil) and (time_diff >= 0) and (#reasons == 0)
+    local score = 1.0
+    if not valid then
+        score = 0.0
+    end
+
+    return {
+        valid = valid,
+        score = score,
+        tick = tick,
+        time_diff = time_diff,
+        reasons = reasons
+    }
+end
+
 local function update_lag_records(entity_index)
     if not lag_records[entity_index] then
         lag_records[entity_index] = {}
     end
-    
+
+    -- Ensure minimal player_data container exists for valid_records
+    if not player_data[entity_index] then
+        player_data[entity_index] = { valid_records = {}, last_valid_record = nil }
+    else
+        if not player_data[entity_index].valid_records then
+            player_data[entity_index].valid_records = {}
+        end
+    end
+
+    local prev_record = lag_records[entity_index][1]
     local record = create_lag_record(entity_index)
     if record and record.simulation_time then
+        -- Validate the record for defensive AA cases
+        local v = validate_backtrack_record(entity_index, record, prev_record)
+        record.validity = v
+
+        if v.valid then
+            -- Store in valid_records queue
+            table.insert(player_data[entity_index].valid_records, 1, record)
+            if #player_data[entity_index].valid_records > 32 then
+                table.remove(player_data[entity_index].valid_records)
+            end
+            player_data[entity_index].last_valid_record = record
+        end
+
         table_insert(lag_records[entity_index], 1, record)
-        
         -- Keep only last 64 records for performance
         while #lag_records[entity_index] > 64 do
             table.remove(lag_records[entity_index])
         end
     end
 end
--- Улучшенный анализ бэктрека без лишней хуйни, просто чтобы пиздато работал
 local function analyze_backtrack_records(entity_index)
     local records = lag_records[entity_index]
     if not records or #records < 2 then 
@@ -3808,6 +3901,7 @@ local function analyze_backtrack_records(entity_index)
                 if temporal_analysis[i] then
                     temporal_analysis[i].ml_score = ml_score
                 end
+                
                 -- === WIDE JITTER DETECTION SCORING INTEGRATION ===
                 -- Apply jitter-specific scoring modifiers to backtrack records
                 local jitter_score_modifier = 0
@@ -4413,9 +4507,17 @@ local function apply_backtrack_to_target(entity_index, record)
         return false
     end
 
+    -- Validate before applying to avoid invalid defensive AA records
+    local prev_record = lag_records[entity_index] and lag_records[entity_index][2]
+    local validity = validate_backtrack_record(entity_index, record, prev_record)
+    if not validity.valid then
+        debug_log("[BT-SKIP] Invalid record: " .. table.concat(validity.reasons or {}, ", "))
+        return false
+    end
+
     -- Store target tick for aim integration
     prepare_shot_with_backtrack(entity_index, record)
-    
+
     local success = true
     local local_player = entity_get_local_player()
     if not local_player then return false end
@@ -5607,7 +5709,7 @@ local function resolve_aisetpos(entity_index)
             for i = #data.desync_history - n + 1, #data.desync_history do
                 sum = sum + math.abs(data.desync_history[i])
             end
-            base_desync = math.min(60, (sum / n))
+            base_desync = math.min(58, (sum / n))
         else
             base_desync = 25
         end
@@ -5819,8 +5921,21 @@ local function resolve_enemy_antiaim(entity_index)
     -- Update lag records
     update_lag_records(entity_index)
     
+    -- Prefer last valid record for resolver if current looks invalid (defensive AA)
+    local current_record = lag_records[entity_index] and lag_records[entity_index][1]
+    local last_valid = player_data[entity_index] and player_data[entity_index].last_valid_record
+    if current_record and current_record.validity and current_record.validity.valid == false and last_valid then
+        -- Temporarily replace top record for resolution
+        lag_records[entity_index][1] = last_valid
+    end
+
     -- Get AISetpos resolution
     local aisetpos_yaw = resolve_aisetpos(entity_index)
+
+    -- Restore current record if we swapped
+    if last_valid and lag_records[entity_index] and lag_records[entity_index][1] ~= current_record then
+        lag_records[entity_index][1] = current_record
+    end
     
     -- Get LC prediction
     local lc_prediction = resolve_lc_prediction(entity_index)
