@@ -6220,18 +6220,23 @@ local function resolve_lc_prediction(entity_index)
     end
 
     if ex1 and predicted_origin then
-        local tr = client.trace_line(ex1, ey1, ez1, predicted_origin.x, predicted_origin.y, predicted_origin.z, entity_index)
-        local frac
-        if type(tr) == "number" then
-            frac = tr
-        else
-            frac = (tr and tr.fraction) or 1
+        -- Check multiple face points around hitbox and nudge to the best visible one
+        local best_p, best_frac = predicted_origin, 0
+        local face_points = get_hitbox_face_points(entity_index, 0)
+        for _, p in ipairs(face_points) do
+            local tr = client.trace_line(ex1, ey1, ez1, p.x, p.y, p.z, entity_index)
+            local frac = (type(tr) == 'number') and tr or ((tr and tr.fraction) or 1)
+            if frac > best_frac then
+                best_frac = frac
+                best_p = p
+            end
         end
-        if frac < 0.95 then
-            -- pull slightly towards eye along line segment to reduce walling
-            local pull = (1 - frac) * 6
-            local to_eye = vec_normalize({x = ex1 - predicted_origin.x, y = ey1 - predicted_origin.y, z = ez1 - predicted_origin.z})
-            predicted_origin = vec_add(predicted_origin, vec_scale(to_eye, pull))
+        if best_frac < 0.95 then
+            local pull = (1 - best_frac) * 8
+            local to_eye = vec_normalize({x = ex1 - best_p.x, y = ey1 - best_p.y, z = ez1 - best_p.z})
+            predicted_origin = vec_add(best_p, vec_scale(to_eye, pull))
+        else
+            predicted_origin = best_p
         end
     end
     
@@ -6370,6 +6375,44 @@ local function get_hitbox_center(entity_index, hitbox_id)
     -- Fallback
     local ox, oy, oz = entity_get_origin(entity_index)
     return {x = ox or 0, y = oy or 0, z = (oz or 0) + (hitbox_id == 0 and 64 or 48)}
+end
+
+-- Hitbox face points (approx) using bones basis; fallback to ring around center
+local function get_hitbox_face_points(entity_index, hitbox_id)
+    hitbox_id = hitbox_id or 0
+    local center = get_hitbox_center(entity_index, hitbox_id)
+    local points = {}
+    local bones = get_bones_cached and get_bones_cached(entity_index) or nil
+    local mat
+    if bones and bones[0] then
+        for _, b in ipairs({8,7,6}) do
+            if bones[b] then mat = bones[b]; break end
+        end
+    end
+    local right, forward, up
+    if mat then
+        right   = {x = mat[0][0], y = mat[1][0], z = mat[2][0]}
+        forward = {x = mat[0][1], y = mat[1][1], z = mat[2][1]}
+        up      = {x = mat[0][2], y = mat[1][2], z = mat[2][2]}
+    else
+        right, forward, up = {x=1,y=0,z=0}, {x=0,y=1,z=0}, {x=0,y=0,z=1}
+    end
+    local ex, ey, ez = 5, 5, 7
+    local function add(p)
+        table.insert(points, p)
+    end
+    add(vec_add(center, vec_scale(right,  ex)))
+    add(vec_add(center, vec_scale(right, -ex)))
+    add(vec_add(center, vec_scale(forward,  ey)))
+    add(vec_add(center, vec_scale(forward, -ey)))
+    add(vec_add(center, vec_scale(up,  ez)))
+    add(vec_add(center, vec_scale(up, -ez)))
+    -- corners
+    add(vec_add(center, vec_add(vec_scale(right, ex), vec_scale(up, ez))))
+    add(vec_add(center, vec_add(vec_scale(right,-ex), vec_scale(up, ez))))
+    add(vec_add(center, vec_add(vec_scale(right, ex), vec_scale(up,-ez))))
+    add(vec_add(center, vec_add(vec_scale(right,-ex), vec_scale(up,-ez))))
+    return points
 end
 
 -- Enhanced FOV system for target selection  
