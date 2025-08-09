@@ -4383,11 +4383,11 @@ local function calculate_advanced_backtrack_score(record, entity_index)
         -- === RAY TRACING FOR VISIBILITY ===
         local trace_result = client.trace_line(my_eye_pos, target_head, entity_index)
         if trace_result and trace_result.hit_entity == entity_index then
-            score = score + 150  -- Direct line of sight
+            score = score + 200  -- Strongly prefer direct line of sight
         elseif trace_result and trace_result.fraction > 0.8 then
-            score = score + 80   -- Mostly visible
+            score = score + 120  -- Prefer mostly visible
         else
-            score = score - 50   -- Obstructed
+            score = score - 120  -- Penalize obstructed records
         end
     end
     
@@ -4684,7 +4684,22 @@ local function apply_backtrack_to_target(entity_index, record)
     local prediction_horizon = math.min(time_diff, (avg_latency * (1 + choke * 2)))
 
     if velocity_mag > 10 and prediction_horizon > 0 then
-        final_position = vec_add(record.origin, vec_scale(record.velocity, prediction_horizon))
+        -- Pull predicted point slightly towards a visible line from eye to reduce wall-misses
+        local predicted = vec_add(record.origin, vec_scale(record.velocity, prediction_horizon))
+        local eye = client.eye_position()
+        if eye then
+            local ex, ey, ez = eye[1], eye[2], eye[3]
+            if ex then
+                local tr = client.trace_line(ex, ey, ez, predicted.x, predicted.y, predicted.z, entity_index)
+                local frac = tr and (tr.fraction or tr) or 1
+                if frac < 0.95 then
+                    local pull = (1 - frac) * 8
+                    local to_eye = vec_normalize({x = ex - predicted.x, y = ey - predicted.y, z = ez - predicted.z})
+                    predicted = vec_add(predicted, vec_scale(to_eye, pull))
+                end
+            end
+        end
+        final_position = predicted
         debug_log(string.format("[BT-INTERP] Interpolated position by %.3fs (lat: %.3f, choke: %.2f)", prediction_horizon, avg_latency, choke))
     end
     end
@@ -6123,11 +6138,11 @@ local function resolve_lc_prediction(entity_index)
     -- Network-aware forward prediction (2D + gravity)
     local dt = ticks_to_predict * globals_tickinterval()
     local predicted_origin = vector_new(current_record.origin)
-    -- horizontal
-    predicted_origin.x = predicted_origin.x + velocity.x * dt
-    predicted_origin.y = predicted_origin.y + velocity.y * dt
-    -- vertical with simple gravity compensation
-    local vz = velocity.z - physics_constants.gravity * dt * 0.5
+    -- horizontal (lerp 2D for smoother anticipation)
+    predicted_origin.x = predicted_origin.x + velocity.x * dt * 0.9
+    predicted_origin.y = predicted_origin.y + velocity.y * dt * 0.9
+    -- vertical with simple gravity compensation (slightly conservative)
+    local vz = velocity.z - physics_constants.gravity * dt * 0.45
     predicted_origin.z = predicted_origin.z + vz * dt
     
         -- Visibility-aware correction: nudge towards nearest visible point
