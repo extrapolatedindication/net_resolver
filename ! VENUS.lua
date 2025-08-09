@@ -6057,6 +6057,29 @@ local function resolve_aisetpos(entity_index)
         end
     end
 
+    -- Target velocity bias: use enemy lateral motion around its facing
+    do
+        local tv = vector_new(entity_get_prop(entity_index, "m_vecVelocity"))
+        local spd = vec_len2d(tv)
+        if spd > 30 then
+            local yaw_basis = (current_record and current_record.angles and current_record.angles.y) or resolved_yaw
+            local fy = math_rad(yaw_basis)
+            local fwd = {x = math_cos(fy), y = math_sin(fy), z = 0}
+            local vnorm = vec_normalize(tv)
+            local cross = fwd.x * vnorm.y - fwd.y * vnorm.x
+            local lateral_weight = math_abs(cross)
+            local bias_sign = (cross >= 0) and 1 or -1
+            local dir_conf = direction_data.prediction_strength or 0.5
+            if dir_conf < 0.85 then
+                if lateral_weight > 0.35 then
+                    direction = bias_sign
+                elseif dir_conf < 0.6 and lateral_weight > 0.2 then
+                    direction = bias_sign
+                end
+            end
+        end
+    end
+
     -- Visibility-based validation of chosen side
     do
         local e1, e2, e3 = client.eye_position()
