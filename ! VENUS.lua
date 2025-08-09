@@ -946,7 +946,7 @@ local function analyze_desync_angle(entity_index)
     end
     
     -- ПРИНУДИТЕЛЬНО ограничиваем значение и возвращаем ТОЛЬКО положительное число
-    local final_desync = math_min(60, math_max(0, base_desync))
+    local final_desync = math_min(58, math_max(0, base_desync))
     
     -- Дополнительная проверка на случай если где-то проскочило отрицательное значение
     if final_desync < 0 then
@@ -1963,7 +1963,6 @@ local function riptide_correction(animlayers, velocity, player_state, quantum_st
     return correction_result
 end
 -- === IMPROVED AISETPOS DIRECTION PREDICTION ===
--- Улучшенное предсказание направления для aisetpos
 local function enhanced_direction_prediction(entity_index, data, current_record, player_state, velocity_data)
     local prediction_result = {
         final_direction = 1,
@@ -2244,7 +2243,7 @@ local function analyze_movement_layers(layers, velocity_data, player_state)
         local phase_factor = math_sin(cycle_normalized * math.pi * 2) * 0.9 + 
                              math_cos(cycle_normalized * math.pi * 1.5) * 0.4
         
-        local desync_magnitude = 58 * weight_smoothed -- Максимальный десинк 58-60
+        local desync_magnitude = 58 * weight_smoothed -- Максимальный десинк 58
         local phase_modifier = math_pow(math_abs(phase_factor), 0.8) * (phase_factor > 0 and 1 or -1) -- Усиление влияния
         
         primary_desync = desync_magnitude * phase_modifier
@@ -2365,8 +2364,8 @@ local function analyze_movement_layers(layers, velocity_data, player_state)
                          math_cos(globals_curtime() * 2.3) * 0.04
     smoothed_desync = smoothed_desync * (1 + human_factor)
 
-    -- Ограничиваем значение десинка максимумом 60
-    local max_desync_limit = 60
+    -- Ограничиваем значение десинка максимумом 58
+    local max_desync_limit = 58
     smoothed_desync = math_min(max_desync_limit, smoothed_desync)
     
     -- Применяем направление к финальному десинку
@@ -2489,12 +2488,8 @@ local function analyze_movement_layers(layers, velocity_data, player_state)
     end
 
     -- Финальное ограничение с учетом Riptide факторов
-    local max_desync_final = 60
-    if riptide_result and riptide_result.riptide_factor > 0.7 then
-        -- При высоком Riptide факторе увеличиваем максимальный лимит
-        max_desync_final = 65
-    end
-    
+    local max_desync_final = 58
+    -- Убираем повышение лимита выше 58: актуальный максимум 58 с учётом обновлений
     signed_desync = math_max(-max_desync_final, math_min(max_desync_final, signed_desync))
 
     return signed_desync
@@ -3813,7 +3808,6 @@ local function analyze_backtrack_records(entity_index)
                 if temporal_analysis[i] then
                     temporal_analysis[i].ml_score = ml_score
                 end
-                
                 -- === WIDE JITTER DETECTION SCORING INTEGRATION ===
                 -- Apply jitter-specific scoring modifiers to backtrack records
                 local jitter_score_modifier = 0
@@ -4306,15 +4300,20 @@ local function get_best_backtrack_record(entity_index)
     local best_record = nil
     local best_score = 0
     local candidate_records = {}
+
+    -- Dynamic time window based on latency/interp, no hard cap on record count
+    local network_info = network_channel_system:get_network_info()
+    local avg_latency = network_info and (network_info.latency.incoming + network_info.latency.outgoing) / 2 or 0
+    local max_window = 0.2 + (avg_latency * 0.5)
     
     -- === ANALYZE ALL VALID RECORDS ===
-    for i = 1, math.min(12, #records) do  -- Check more records
+    for i = 1, #records do
         local record = records[i]
         if record and record.simulation_time and record.origin then
             local time_diff = globals.curtime() - record.simulation_time
             
             -- Basic time validation
-            if time_diff >= 0 and time_diff <= 0.4 then
+            if time_diff >= 0 and time_diff <= max_window then
                 local score = calculate_advanced_backtrack_score(record, entity_index)
                 
                 if score > 0 then
@@ -4325,6 +4324,8 @@ local function get_best_backtrack_record(entity_index)
                         time_diff = time_diff
                     })
                 end
+            else
+                break -- older records will only be even older
             end
         end
     end
@@ -4411,6 +4412,9 @@ local function apply_backtrack_to_target(entity_index, record)
     if not record or not entity_index then
         return false
     end
+
+    -- Store target tick for aim integration
+    prepare_shot_with_backtrack(entity_index, record)
     
     local success = true
     local local_player = entity_get_local_player()
@@ -4418,22 +4422,28 @@ local function apply_backtrack_to_target(entity_index, record)
     
     -- === POSITION INTERPOLATION FOR MOVING TARGETS ===
     local final_position = record.origin
-    
+
     if record.velocity and record.backtrack_metadata then
         local time_diff = record.backtrack_metadata.time_diff
         local velocity_mag = math.sqrt(record.velocity.x^2 + record.velocity.y^2 + record.velocity.z^2)
-        
-        -- For moving targets, interpolate position forward slightly
-        if velocity_mag > 10 and time_diff > 0.05 then
-            local interpolation_factor = math.min(0.3, time_diff * 0.8)
-            
+
+        -- Network-aware forward interpolation (no hard caps)
+        local network_info = network_channel_system:get_network_info()
+        local tick = globals.tickinterval()
+        local avg_latency = network_info and (network_info.latency.incoming + network_info.latency.outgoing) / 2 or 0
+        local choke = network_info and (network_info.choke.incoming + network_info.choke.outgoing) / 2 or 0
+        local prediction_horizon = math.min(time_diff, (avg_latency * (1 + choke * 2)))
+
+        if velocity_mag > 10 and prediction_horizon > 0 then
+            local interpolation_factor = prediction_horizon
+
             final_position = {
                 x = record.origin.x + (record.velocity.x * interpolation_factor),
                 y = record.origin.y + (record.velocity.y * interpolation_factor),
                 z = record.origin.z + (record.velocity.z * interpolation_factor)
             }
-            
-            debug_log(string.format("[BT-INTERP] Interpolated position by %.3fs", interpolation_factor))
+
+            debug_log(string.format("[BT-INTERP] Interpolated position by %.3fs (lat: %.3f, choke: %.2f)", interpolation_factor, avg_latency, choke))
         end
     end
     
@@ -6147,7 +6157,6 @@ local function initialize_player_network(entity_index)
     
     return enhanced_resolver.neural_networks[entity_index]
 end
-
 -- Extract features for neural network
 local function extract_neural_features(entity_index)
     local features = {}
@@ -6336,7 +6345,7 @@ local function neural_resolve_aisetpos(entity_index)
     local prediction = network:forward(features)
     if not prediction or #prediction < 3 then return 0 end
     
-    local neural_yaw = prediction[1] * 60.0
+    local neural_yaw = prediction[1] * 58.0
     local neural_confidence = math.max(0, math.min(1, prediction[2]))
     local neural_direction = prediction[3] > 0 and 1 or -1
     
@@ -6665,7 +6674,7 @@ local function learn_from_shot_result(entity_index, shot_hit, predicted_yaw)
             local features = extract_neural_features(entity_index)
             if #features >= 15 then
                 local target = {
-                    predicted_yaw / 60.0,
+                    predicted_yaw / 58.0,
                     shot_hit and 1.0 or 0.2,
                     predicted_yaw > 0 and 1.0 or -1.0
                 }
