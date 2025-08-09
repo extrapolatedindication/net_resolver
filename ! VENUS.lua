@@ -2672,6 +2672,16 @@ local function create_lag_record(entity_index)
     }
 end
 
+-- Network interpolation helper (cl_interp/cl_interp_ratio/updaterate)
+local function get_interp_seconds()
+    local get = client.get_cvar
+    local ratio = tonumber(get and get("cl_interp_ratio") or nil) or 2
+    local interp = tonumber(get and get("cl_interp") or nil) or 0.031
+    local updaterate = tonumber(get and get("cl_updaterate") or nil) or 64
+    local calc = ratio / math.max(1, updaterate)
+    return math.max(interp, calc)
+end
+
 -- === COMPUTE VALID TICK FOR BACKTRACK (DYNAMIC, NETWORK-AWARE) ===
 local function compute_valid_tick_for_record(record)
     if not record or not record.simulation_time then return nil end
@@ -2701,7 +2711,7 @@ local function compute_valid_tick_for_record(record)
     else
         jitter = math_min(0.02, avg_choke * 0.05)
     end
-    local target_time = record.simulation_time + avg_latency - jitter
+    local target_time = record.simulation_time + avg_latency + get_interp_seconds() - jitter
     local tick = math_floor(target_time / tick_interval + 0.5)
     return tick
 end
