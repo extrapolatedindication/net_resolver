@@ -737,6 +737,45 @@ local function vector_dot(vec1, vec2)
     return v1.x * v2.x + v1.y * v2.y + v1.z * v2.z
 end
 
+-- Robust vector helpers
+local function vec_add(a, b)
+    a, b = vector_new(a), vector_new(b)
+    return {x = a.x + b.x, y = a.y + b.y, z = a.z + b.z}
+end
+
+local function vec_sub(a, b)
+    a, b = vector_new(a), vector_new(b)
+    return {x = a.x - b.x, y = a.y - b.y, z = a.z - b.z}
+end
+
+local function vec_scale(a, s)
+    a = vector_new(a)
+    s = safe_number(s, 0)
+    return {x = a.x * s, y = a.y * s, z = a.z * s}
+end
+
+local function vec_len2d(a)
+    a = vector_new(a)
+    return safe_sqrt(a.x * a.x + a.y * a.y)
+end
+
+local function vec_dist2d(a, b)
+    local d = vec_sub(a, b)
+    return vec_len2d(d)
+end
+
+local function vec_normalize(a)
+    a = vector_new(a)
+    local len = vector_length(a)
+    if len < 1e-6 then return {x = 0, y = 0, z = 0} end
+    return {x = a.x / len, y = a.y / len, z = a.z / len}
+end
+
+local function angle_lerp(a, b, t)
+    t = math_max(0, math_min(1, t))
+    local delta = normalize_angle_safe(b - a)
+    return normalize_angle_safe(a + delta * t)
+end
 
 -- Исправим функцию safe_get_origin для более надежной работы
 local function safe_get_origin(entity_index)
@@ -4422,19 +4461,16 @@ local function calculate_advanced_backtrack_score(record, entity_index)
     if network_info then
         local quality_score = 100
         
-        -- Packet loss penalty
         if network_info.packet_loss then
             local avg_loss = (network_info.packet_loss.incoming + network_info.packet_loss.outgoing) / 2
             quality_score = quality_score - (avg_loss * 500)
         end
         
-        -- Choke penalty
         if network_info.choke then
             local avg_choke = (network_info.choke.incoming + network_info.choke.outgoing) / 2
             quality_score = quality_score - (avg_choke * 300)
         end
         
-        -- Latency penalty
         local latency = (network_info.latency.incoming + network_info.latency.outgoing) / 2
         if latency > 0.08 then  -- >80ms
             quality_score = quality_score - ((latency - 0.08) * 1000)
@@ -4559,8 +4595,8 @@ local function get_best_backtrack_record(entity_index)
 
     local max_position_diff = 250
     if selected_record.velocity then
-        local velocity_mag = math.sqrt(selected_record.velocity.x^2 + selected_record.velocity.y^2 + selected_record.velocity.z^2)
-        max_position_diff = max_position_diff + (velocity_mag * candidate_records[1].time_diff * 2)
+        local vel2d = vec_len2d(selected_record.velocity)
+        max_position_diff = max_position_diff + (vel2d * candidate_records[1].time_diff * 1.5)
     end
     
     if position_diff > max_position_diff then
@@ -4635,24 +4671,16 @@ local function apply_backtrack_to_target(entity_index, record)
         local time_diff = record.backtrack_metadata.time_diff
         local velocity_mag = math.sqrt(record.velocity.x^2 + record.velocity.y^2 + record.velocity.z^2)
 
-        -- Network-aware forward interpolation (no hard caps)
-        local network_info = network_channel_system:get_network_info()
-        local tick = globals.tickinterval()
-        local avg_latency = network_info and (network_info.latency.incoming + network_info.latency.outgoing) / 2 or 0
-        local choke = network_info and (network_info.choke.incoming + network_info.choke.outgoing) / 2 or 0
-        local prediction_horizon = math.min(time_diff, (avg_latency * (1 + choke * 2)))
+            -- Network-aware forward interpolation (no hard caps)
+    local network_info = network_channel_system:get_network_info()
+    local avg_latency = network_info and (network_info.latency.incoming + network_info.latency.outgoing) / 2 or 0
+    local choke = network_info and (network_info.choke.incoming + network_info.choke.outgoing) / 2 or 0
+    local prediction_horizon = math.min(time_diff, (avg_latency * (1 + choke * 2)))
 
-        if velocity_mag > 10 and prediction_horizon > 0 then
-            local interpolation_factor = prediction_horizon
-
-            final_position = {
-                x = record.origin.x + (record.velocity.x * interpolation_factor),
-                y = record.origin.y + (record.velocity.y * interpolation_factor),
-                z = record.origin.z + (record.velocity.z * interpolation_factor)
-            }
-
-            debug_log(string.format("[BT-INTERP] Interpolated position by %.3fs (lat: %.3f, choke: %.2f)", interpolation_factor, avg_latency, choke))
-        end
+    if velocity_mag > 10 and prediction_horizon > 0 then
+        final_position = vec_add(record.origin, vec_scale(record.velocity, prediction_horizon))
+        debug_log(string.format("[BT-INTERP] Interpolated position by %.3fs (lat: %.3f, choke: %.2f)", prediction_horizon, avg_latency, choke))
+    end
     end
     
     -- === ENHANCED POSITION APPLICATION ===
@@ -6055,12 +6083,16 @@ local function resolve_lc_prediction(entity_index)
     -- Basic prediction calculation
     local ping = math.max(0.016, globals_frametime() * 2)
     local ticks_to_predict = math.min(15, math.ceil(ping / globals_tickinterval()) + 2)
-    
-    -- Simple forward prediction
+
+    -- Network-aware forward prediction (2D + gravity)
+    local dt = ticks_to_predict * globals_tickinterval()
     local predicted_origin = vector_new(current_record.origin)
-    predicted_origin.x = predicted_origin.x + (velocity.x * ticks_to_predict * globals_tickinterval())
-    predicted_origin.y = predicted_origin.y + (velocity.y * ticks_to_predict * globals_tickinterval())
-    predicted_origin.z = predicted_origin.z + (velocity.z * ticks_to_predict * globals_tickinterval())
+    -- horizontal
+    predicted_origin.x = predicted_origin.x + velocity.x * dt
+    predicted_origin.y = predicted_origin.y + velocity.y * dt
+    -- vertical with simple gravity compensation
+    local vz = velocity.z - physics_constants.gravity * dt * 0.5
+    predicted_origin.z = predicted_origin.z + vz * dt
     
     return {
         origin = predicted_origin,
