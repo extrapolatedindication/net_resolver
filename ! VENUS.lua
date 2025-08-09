@@ -6334,21 +6334,26 @@ local function resolve_lc_prediction(entity_index)
     end
 
     if ex1 and predicted_origin then
-        -- Check multiple face points around hitbox and nudge to the best visible one
-        local best_p, best_frac = predicted_origin, 0
-        local face_points = get_hitbox_face_points(entity_index, 0)
-        for _, p in ipairs(face_points) do
-            local tr = client.trace_line(ex1, ey1, ez1, p.x, p.y, p.z, entity_index)
-            local frac = (type(tr) == 'number') and tr or ((tr and tr.fraction) or 1)
-            if frac > best_frac then
-                best_frac = frac
-                best_p = p
+        -- Check multiple face points: head then chest (fallback)
+        local function best_face_point_for(hitbox_id)
+            local best_p, best_f = predicted_origin, 0
+            local pts = get_hitbox_face_points(entity_index, hitbox_id)
+            for _, p in ipairs(pts) do
+                local tr = client.trace_line(ex1, ey1, ez1, p.x, p.y, p.z, entity_index)
+                local f = (type(tr) == 'number') and tr or ((tr and tr.fraction) or 1)
+                if f > best_f then best_f, best_p = f, p end
             end
+            return best_p, best_f
+        end
+        local best_p, best_f = best_face_point_for(0)
+        if best_f < 0.6 then
+            local chest_p, chest_f = best_face_point_for(5)
+            if chest_f > best_f then best_p, best_f = chest_p, chest_f end
         end
         -- stronger pull at high ping
         local pull_base = avg_latency and (avg_latency > 0.07 and 10 or 8) or 8
-        if best_frac < 0.95 then
-            local pull = (1 - best_frac) * pull_base
+        if best_f < 0.95 then
+            local pull = (1 - best_f) * pull_base
             local to_eye = vec_normalize({x = ex1 - best_p.x, y = ey1 - best_p.y, z = ez1 - best_p.z})
             predicted_origin = vec_add(best_p, vec_scale(to_eye, pull))
         else
