@@ -3967,7 +3967,6 @@ local function analyze_backtrack_records(entity_index)
                 if temporal_analysis[i] then
                     temporal_analysis[i].ml_score = ml_score
                 end
-                
                 -- === WIDE JITTER DETECTION SCORING INTEGRATION ===
                 -- Apply jitter-specific scoring modifiers to backtrack records
                 local jitter_score_modifier = 0
@@ -4516,7 +4515,7 @@ local function get_best_backtrack_record(entity_index)
     -- Position validation with interpolation
     local current_origin = vector_new(entity_get_prop(entity_index, "m_vecOrigin"))
     local position_diff = vector_distance(current_origin, selected_record.origin)
-    
+
     local max_position_diff = 250
     if selected_record.velocity then
         local velocity_mag = math.sqrt(selected_record.velocity.x^2 + selected_record.velocity.y^2 + selected_record.velocity.z^2)
@@ -6224,7 +6223,6 @@ client.set_event_callback("paint", process_frame)
 
 -- === NEURAL NETWORK ENHANCEMENT SYSTEM ===
 -- Встроенная система машинного обучения для улучшения резольвера
-
 local function create_neural_network(config)
     local network = {
         input_size = config.input_size,
