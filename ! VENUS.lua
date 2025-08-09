@@ -6114,18 +6114,17 @@ local function resolve_lc_prediction(entity_index)
     end
 
     if ex1 and predicted_origin then
-            local tr = client.trace_line(ex1, ey1, ez1, predicted_origin.x, predicted_origin.y, predicted_origin.z, entity_index)
-            local frac = tr and (tr.fraction or tr) or 1
-            if frac < 0.95 then
-                -- pull slightly towards eye along line segment to reduce walling
-                local pull = (1 - frac) * 6
-                local to_eye = vec_normalize({x = ex1 - predicted_origin.x, y = ey1 - predicted_origin.y, z = ez1 - predicted_origin.z})
-                predicted_origin = vec_add(predicted_origin, vec_scale(to_eye, pull))
-            end
+        local tr = client.trace_line(ex1, ey1, ez1, predicted_origin.x, predicted_origin.y, predicted_origin.z, entity_index)
+        local frac = tr and (tr.fraction or tr) or 1
+        if frac < 0.95 then
+            -- pull slightly towards eye along line segment to reduce walling
+            local pull = (1 - frac) * 6
+            local to_eye = vec_normalize({x = ex1 - predicted_origin.x, y = ey1 - predicted_origin.y, z = ez1 - predicted_origin.z})
+            predicted_origin = vec_add(predicted_origin, vec_scale(to_eye, pull))
         end
     end
     
-        local tick_dt = math.max(globals_tickinterval(), dt)
+    local tick_dt = math.max(globals_tickinterval(), dt)
     return {
         origin = predicted_origin,
         angles = current_record.angles,
