@@ -6196,6 +6196,15 @@ local function resolve_enemy_antiaim(entity_index)
     -- Get AISetpos resolution
     local aisetpos_yaw = resolve_aisetpos(entity_index)
 
+    -- Immediately apply resolved yaw to entity to ensure resolver takes effect even without backtrack apply
+    if aisetpos_yaw and aisetpos_yaw ~= 0 then
+        local base_pitch = entity_get_prop(entity_index, "m_angEyeAngles[0]") or entity_get_prop(entity_index, "m_angEyeAngles", 0) or 0
+        pcall(function()
+            entity_set_prop(entity_index, "m_angEyeAngles[0]", base_pitch)
+            entity_set_prop(entity_index, "m_angEyeAngles[1]", normalize_angle_safe(aisetpos_yaw))
+        end)
+    end
+
     -- Restore current record if we swapped
     if last_valid and lag_records[entity_index] and lag_records[entity_index][1] ~= current_record then
         lag_records[entity_index][1] = current_record
