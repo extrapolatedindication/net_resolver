@@ -6115,7 +6115,12 @@ local function resolve_lc_prediction(entity_index)
 
     if ex1 and predicted_origin then
         local tr = client.trace_line(ex1, ey1, ez1, predicted_origin.x, predicted_origin.y, predicted_origin.z, entity_index)
-        local frac = tr and (tr.fraction or tr) or 1
+        local frac
+        if type(tr) == "number" then
+            frac = tr
+        else
+            frac = (tr and tr.fraction) or 1
+        end
         if frac < 0.95 then
             -- pull slightly towards eye along line segment to reduce walling
             local pull = (1 - frac) * 6
