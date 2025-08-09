@@ -43,6 +43,57 @@ ffi.cdef[[
     } lag_record_t;
 ]]
 
+ffi.cdef[[
+    typedef float matrix3x4_t[3][4];
+]]
+
+-- Bones cache per tick
+local bones_cache = { tick = -1, per_entity = {} }
+
+local function try_setup_bones_vtable(ent, out_bones, max_bones, bone_mask, time)
+    local ok, renderable = pcall(function()
+        return entity.get_renderable and entity.get_renderable(ent) or nil
+    end)
+    if not ok or not renderable then return false end
+    local vtbl = ffi.cast("void***", renderable)[0]
+    for idx = 13, 18 do
+        local fn_ok, fn = pcall(function()
+            return ffi.cast("bool(__thiscall*)(void*, matrix3x4_t*, int, int, float)", vtbl[idx])
+        end)
+        if fn_ok and fn ~= nil then
+            local ok_call, res = pcall(function()
+                return fn(renderable, out_bones, max_bones, bone_mask, time)
+            end)
+            if ok_call and res then return true end
+        end
+    end
+    return false
+end
+
+local function get_bones_cached(ent)
+    local cur_tick = globals.tickcount()
+    if bones_cache.tick ~= cur_tick then
+        bones_cache.tick = cur_tick
+        bones_cache.per_entity = {}
+    end
+    if bones_cache.per_entity[ent] then return bones_cache.per_entity[ent] end
+    local bones = ffi.new("matrix3x4_t[128]")
+    local ok = try_setup_bones_vtable(ent, bones, 128, 0x100, globals.curtime())
+    if ok then
+        bones_cache.per_entity[ent] = bones
+        return bones
+    end
+    return nil
+end
+
+local function transform_point(mat, v)
+    return {
+        x = mat[0][0]*v.x + mat[0][1]*v.y + mat[0][2]*v.z + mat[0][3],
+        y = mat[1][0]*v.x + mat[1][1]*v.y + mat[1][2]*v.z + mat[1][3],
+        z = mat[2][0]*v.x + mat[2][1]*v.y + mat[2][2]*v.z + mat[2][3]
+    }
+end
+
 -- UI Menu Creation
 local ui_get = ui.get
 
@@ -6289,12 +6340,29 @@ end
 -- Safe hitbox center (fallbacks to origin + 64 for head)
 local function get_hitbox_center(entity_index, hitbox_id)
     hitbox_id = hitbox_id or 0
+    -- Fast path via API
     if entity.hitbox_position then
         local ok, x, y, z = pcall(entity.hitbox_position, entity_index, hitbox_id)
         if ok and x then
             return {x = x, y = y, z = z}
         end
     end
+    -- Try bones (approx) via vtable SetupBones
+    local bones = get_bones_cached(entity_index)
+    if bones and bones[0] then
+        for _, b in ipairs({8, 7, 6}) do
+            local mat = bones[b]
+            if mat then
+                local cx = mat[0][3]
+                local cy = mat[1][3]
+                local cz = mat[2][3]
+                if cx ~= 0 or cy ~= 0 or cz ~= 0 then
+                    return {x = cx, y = cy, z = cz}
+                end
+            end
+        end
+    end
+    -- Fallback
     local ox, oy, oz = entity_get_origin(entity_index)
     return {x = ox or 0, y = oy or 0, z = (oz or 0) + (hitbox_id == 0 and 64 or 48)}
 end
