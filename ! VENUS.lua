@@ -4405,12 +4405,14 @@ local function calculate_advanced_backtrack_score(record, entity_index)
     
     -- === 1. TEMPORAL QUALITY SCORING ===
     local time_diff = globals.curtime() - record.simulation_time
-    local max_backtrack_time = 0.2  -- 200ms max
+    local max_backtrack_time = 0.2  -- 200ms base
     local network_info = network_channel_system:get_network_info()
-    
+    local interp = get_interp_seconds()
     if network_info then
         local latency = (network_info.latency.incoming + network_info.latency.outgoing) / 2
-        max_backtrack_time = max_backtrack_time + (latency * 0.5)
+        max_backtrack_time = max_backtrack_time + (latency * 0.5) + (interp * 0.5)
+    else
+        max_backtrack_time = max_backtrack_time + (interp * 0.5)
     end
     
     -- Optimal time range scoring
@@ -4448,28 +4450,29 @@ local function calculate_advanced_backtrack_score(record, entity_index)
             score = score + 40
         end
         
-        -- === BULLET TRACE FOR VISIBILITY ===
-        local tr_ok, trb = pcall(function()
-            return client.trace_bullet(entity_get_local_player(), my_eye_pos[1], my_eye_pos[2], my_eye_pos[3], target_head.x, target_head.y, target_head.z, entity_index)
-        end)
-        if tr_ok and trb then
-            if trb.entity == entity_index or (trb.fraction and trb.fraction > 0.9) then
-                score = score + 220
-            elseif trb.fraction and trb.fraction > 0.75 then
-                score = score + 120
-            else
-                score = score - 140
+        -- === BULLET TRACE FOR VISIBILITY === (head then chest fallback)
+        local function score_target_point(pt)
+            local ok, trb = pcall(function()
+                return client.trace_bullet(entity_get_local_player(), my_eye_pos[1], my_eye_pos[2], my_eye_pos[3], pt.x, pt.y, pt.z, entity_index)
+            end)
+            if ok and trb then return trb.fraction or 0 end
+            local tl = client.trace_line(my_eye_pos, pt, entity_index)
+            return (tl and tl.fraction) or 0
+        end
+        local head_frac = score_target_point(target_head)
+        if head_frac < 0.6 then
+            local chest = get_hitbox_center(entity_index, 5)
+            local chest_frac = score_target_point(chest)
+            if chest_frac > head_frac then
+                head_frac = chest_frac
             end
+        end
+        if head_frac > 0.9 then
+            score = score + 220
+        elseif head_frac > 0.75 then
+            score = score + 120
         else
-            -- fallback
-            local trace_result = client.trace_line(my_eye_pos, target_head, entity_index)
-            if trace_result and trace_result.hit_entity == entity_index then
-                score = score + 200
-            elseif trace_result and trace_result.fraction > 0.8 then
-                score = score + 120
-            else
-                score = score - 120
-            end
+            score = score - 140
         end
     end
     
