@@ -6040,15 +6040,15 @@ local function resolve_aisetpos(entity_index)
     -- Anti-detection variance
     local time_variance = math.sin(globals.curtime() * 1.7 + entity_index) * 1.5
 
-    -- Gentle EMA smoothing to reduce jitter before variance
+    -- Angle smoothing with wrap-aware lerp before variance
     data.yaw_history = data.yaw_history or {}
     local prev_yaw = data.yaw_history[1] or resolved_yaw
-    local alpha = 0.2
-    local smoothed_core = normalize_angle_safe((1 - alpha) * prev_yaw + alpha * resolved_yaw)
+    local resq = (data.performance_metrics and data.performance_metrics.resolution_quality) or 0.5
+    local t = math_max(0.2, math_min(0.9, 0.2 + resq * 0.6))
+    local smoothed_core = angle_lerp(prev_yaw, resolved_yaw, t)
 
     resolved_yaw = normalize_angle_safe(smoothed_core + time_variance)
 
-    -- Keep small history
     table.insert(data.yaw_history, 1, resolved_yaw)
     if #data.yaw_history > 16 then table.remove(data.yaw_history) end
     
