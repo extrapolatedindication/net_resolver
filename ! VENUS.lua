@@ -5999,6 +5999,11 @@ local function resolve_aisetpos(entity_index)
         end
     end
 
+    -- Flip briefly only on resolver miss
+    if data.resolver_flip_until and globals.curtime() < data.resolver_flip_until then
+        direction = -direction
+    end
+
     -- Visibility-based validation of chosen side
     do
         local e1, e2, e3 = client.eye_position()
@@ -6468,6 +6473,29 @@ client.set_event_callback("player_hurt", on_player_hurt)
 client.set_event_callback("weapon_fire", on_weapon_fire)
 client.set_event_callback("round_start", on_round_start)
 client.set_event_callback("paint", process_frame)
+
+-- AIM events: flip resolver side only on resolver miss
+client.set_event_callback("aim_fire", function(e)
+    -- Optionally capture state; keeping minimal per request
+end)
+
+client.set_event_callback("aim_hit", function(e)
+    local ent = e.target or e.target_index
+    if ent and player_data[ent] then
+        player_data[ent].resolver_flip_until = nil
+    end
+end)
+
+client.set_event_callback("aim_miss", function(e)
+    local ent = e.target or e.target_index
+    local reason = e.reason and tostring(e.reason):lower() or ""
+    if ent then
+        player_data[ent] = player_data[ent] or {}
+        if reason == "resolver" then
+            player_data[ent].resolver_flip_until = globals.curtime() + 0.35
+        end
+    end
+end)
 -- === NEURAL NETWORK ENHANCEMENT SYSTEM ===
 -- Встроенная система машинного обучения для улучшения резольвера
 local function create_neural_network(config)
