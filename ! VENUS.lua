@@ -6035,6 +6035,28 @@ local function resolve_aisetpos(entity_index)
         direction = -direction
     end
 
+    -- Local movement bias: use our lateral motion to bias side
+    do
+        local lp = entity_get_local_player()
+        if lp then
+            local lv = vector_new(entity_get_prop(lp, "m_vecVelocity"))
+            local speed2d = vec_len2d(lv)
+            if speed2d > 30 then
+                local ex, ey, ez = entity_get_origin(entity_index)
+                local lx, ly, lz = entity_get_origin(lp)
+                if ex and lx then
+                    local e2l = {x = lx - ex, y = ly - ey, z = 0}
+                    local cross = e2l.x * lv.y - e2l.y * lv.x
+                    local bias_sign = cross >= 0 and 1 or -1
+                    local bias_strength = math_min(1.0, speed2d / 250)
+                    if (direction_data.prediction_strength or 0.5) < 0.8 then
+                        direction = (bias_strength > 0.25) and bias_sign or direction
+                    end
+                end
+            end
+        end
+    end
+
     -- Visibility-based validation of chosen side
     do
         local e1, e2, e3 = client.eye_position()
