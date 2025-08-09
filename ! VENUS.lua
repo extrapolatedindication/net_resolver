@@ -2690,10 +2690,15 @@ local function compute_valid_tick_for_record(record)
     local max_window = 0.2 + (avg_latency * 0.5)
     if time_diff > max_window then return nil end
 
-    -- Convert target time to engine tick with small jitter buffer
+    -- Convert target time to engine tick with small jitter buffer (latency-aware)
     local jitter = 0
+    local avg_choke = 0
     if network_info and network_info.choke then
-        local avg_choke = (network_info.choke.incoming + network_info.choke.outgoing) / 2
+        avg_choke = (network_info.choke.incoming + network_info.choke.outgoing) / 2
+    end
+    if avg_latency > 0.07 then
+        jitter = math_min(0.05, avg_latency * 0.5 + avg_choke * 0.05)
+    else
         jitter = math_min(0.02, avg_choke * 0.05)
     end
     local target_time = record.simulation_time + avg_latency - jitter
@@ -5965,16 +5970,18 @@ local function resolve_aisetpos(entity_index)
         
         -- Network quality adjustment
         if network_quality then
-            local network_stability = network_quality.score or 1.0
-            jitter_correction = jitter_correction * network_stability
-            
-            -- Additional compensation for high latency
-            if network_info and network_info.latency then
-                local avg_latency = (network_info.latency.incoming + network_info.latency.outgoing) / 2
-                if avg_latency > 0.05 then
-                    jitter_correction = jitter_correction * (1 + (avg_latency - 0.05) * 2)
-                end
+                    local network_stability = network_quality.score or 1.0
+        jitter_correction = jitter_correction * network_stability
+        
+        -- Additional compensation for high latency
+        if network_info and network_info.latency then
+            local avg_latency = (network_info.latency.incoming + network_info.latency.outgoing) / 2
+            if avg_latency > 0.05 then
+                -- scale down jitter correction to avoid over-rotation at high ping
+                local damp = math_min(0.9, (avg_latency - 0.05) * 3)
+                jitter_correction = jitter_correction * (1 - damp)
             end
+        end
         end
         
             -- Force positive correction (requirement)
@@ -6244,7 +6251,9 @@ local function resolve_lc_prediction(entity_index)
     local network_info = network_channel_system:get_network_info()
     local avg_latency = network_info and (network_info.latency.incoming + network_info.latency.outgoing) / 2 or globals_frametime()
     local choke = network_info and (network_info.choke.incoming + network_info.choke.outgoing) / 2 or 0
-    local net_dt = avg_latency * (1 + choke)
+    -- latency-aware horizon (more conservative at high ping)
+    local net_dt = avg_latency * (1 + choke * 0.5)
+    if avg_latency > 0.07 then net_dt = net_dt * 0.8 end
     local ticks_to_predict = math.min(15, math.ceil(net_dt / globals_tickinterval()) + 1)
 
     -- Network-aware forward prediction (2D + gravity)
@@ -6279,8 +6288,10 @@ local function resolve_lc_prediction(entity_index)
                 best_p = p
             end
         end
+        -- stronger pull at high ping
+        local pull_base = avg_latency and (avg_latency > 0.07 and 10 or 8) or 8
         if best_frac < 0.95 then
-            local pull = (1 - best_frac) * 8
+            local pull = (1 - best_frac) * pull_base
             local to_eye = vec_normalize({x = ex1 - best_p.x, y = ey1 - best_p.y, z = ez1 - best_p.z})
             predicted_origin = vec_add(best_p, vec_scale(to_eye, pull))
         else
