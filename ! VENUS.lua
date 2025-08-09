@@ -5955,8 +5955,13 @@ local function resolve_aisetpos(entity_index)
             ex1, ey1, ez1 = e1[1], e1[2], e1[3]
         end
         if ex1 then
-            local hx, hy, hz = entity_get_origin(entity_index)
-            hz = (hz or 0) + 64
+            local head = (entity.hitbox_position and ({pcall(entity.hitbox_position, entity_index, 0)}) or {})
+            local hx, hy, hz
+            if head[1] and head[2] then hx, hy, hz = head[2], head[3], head[4] end
+            if not hx then
+                hx, hy, hz = entity_get_origin(entity_index)
+                hz = (hz or 0) + 64
+            end
             local off = 10
             local ly = math_rad(normalize_angle_safe(resolved_yaw - base_desync))
             local ry = math_rad(normalize_angle_safe(resolved_yaw + base_desync))
