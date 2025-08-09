@@ -6125,15 +6125,16 @@ local function resolve_lc_prediction(entity_index)
         end
     end
     
+        local tick_dt = math.max(globals_tickinterval(), dt)
     return {
         origin = predicted_origin,
         angles = current_record.angles,
         velocity = velocity,
-        simulation_time = current_record.simulation_time + (ticks_to_predict * globals_tickinterval()),
-        ticks_predicted = ticks_to_predict,
+        simulation_time = current_record.simulation_time + tick_dt,
+        ticks_predicted = math.ceil(dt / globals_tickinterval()),
         confidence = math_max(0.5, 1.0 - choke * 0.5)
-         }
-  end
+    }
+end
 
 -- === ENHANCED ENEMY ANTIAIM RESOLVER ===
 local function resolve_enemy_antiaim(entity_index)
