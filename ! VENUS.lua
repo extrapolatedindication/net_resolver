@@ -230,48 +230,82 @@ local function normalize_angle_safe(angle)
     return safe_angle
 end
 
--- Global freestand bias helper for other scripts
+-- Global freestand bias helper for other scripts (map-aware, bbox multipoint)
 function compute_freestand_bias(entity_index)
     local lp = entity_get_local_player()
     if not lp then return {dir = 0, confidence = 0} end
 
-    local ex, ey, ez = entity_get_origin(entity_index)
-    local lx, ly, lz = entity_get_origin(lp)
-    if not ex or not lx then return {dir = 0, confidence = 0} end
+    -- Map profile (simple)
+    local map = (globals.mapname and globals.mapname()) or (client.get_mapname and client.get_mapname()) or 'default'
+    map = tostring(map):lower()
+    local offset = (map:find('inferno') and 14) or (map:find('overpass') and 13) or (map:find('nuke') and 11) or 12
 
-    local to_local_yaw = math_deg(math_atan2(ly - ey, lx - ex))
-    local yaw_rad = (to_local_yaw + 90) * math.pi / 180
-    local head = {x = ex, y = ey, z = ez + 64}
-    local offset = 12
-    local left = {x = head.x + math.cos(yaw_rad) * offset, y = head.y + math.sin(yaw_rad) * offset, z = head.z}
-    local right = {x = head.x - math.cos(yaw_rad) * offset, y = head.y - math.sin(yaw_rad) * offset, z = head.z}
-
-    -- Get eye position in both return formats
+    -- Eye position (normalize both formats)
     local e1, e2, e3 = client_eye_position()
     local ex1, ey1, ez1
-    if type(e1) == "number" and type(e2) == "number" and type(e3) == "number" then
+    if type(e1) == 'number' and type(e2) == 'number' and type(e3) == 'number' then
         ex1, ey1, ez1 = e1, e2, e3
-    elseif type(e1) == "table" and e1[1] and e1[2] and e1[3] then
+    elseif type(e1) == 'table' and e1[1] and e1[2] and e1[3] then
         ex1, ey1, ez1 = e1[1], e1[2], e1[3]
     else
         return {dir = 0, confidence = 0}
     end
 
-    -- Trace API may return a number (fraction). Normalize to fraction value.
-    local frac_l = client_trace_line(ex1, ey1, ez1, left.x, left.y, left.z, entity_index)
-    local frac_r = client_trace_line(ex1, ey1, ez1, right.x, right.y, right.z, entity_index)
-    if type(frac_l) ~= "number" then frac_l = (frac_l and frac_l.fraction) or 1 end
-    if type(frac_r) ~= "number" then frac_r = (frac_r and frac_r.fraction) or 1 end
+    local head = get_hitbox_center(entity_index, 0)
+    local bbox = get_hitbox_bbox_via_studio and get_hitbox_bbox_via_studio(entity_index, 0)
 
-    local cover_l = 1 - (frac_l or 1)
-    local cover_r = 1 - (frac_r or 1)
-
-    local dir = 0
-    if cover_l > cover_r + 0.05 then dir = 1
-    elseif cover_r > cover_l + 0.05 then dir = -1
+    local function sample_face_points(left)
+        local pts = {}
+        if bbox and bbox.mins and bbox.maxs and bbox.center then
+            local cx, cy, cz = bbox.center.x, bbox.center.y, bbox.center.z
+            local mx, my, mz = bbox.mins.x, bbox.mins.y, bbox.mins.z
+            local Mx, My, Mz = bbox.maxs.x, bbox.maxs.y, bbox.maxs.z
+            if left then
+                table.insert(pts, {x = mx, y = cy, z = cz})
+                table.insert(pts, {x = mx, y = My, z = cz})
+                table.insert(pts, {x = mx, y = my, z = cz})
+            else
+                table.insert(pts, {x = Mx, y = cy, z = cz})
+                table.insert(pts, {x = Mx, y = My, z = cz})
+                table.insert(pts, {x = Mx, y = my, z = cz})
+            end
+        else
+            -- Fallback: yaw-based left/right offsets from center
+            local ex, ey, ez = entity_get_origin(entity_index)
+            local lx, ly, lz = entity_get_origin(lp)
+            if not ex or not lx then return pts end
+            local to_local_yaw = math_deg(math_atan2(ly - ey, lx - ex))
+            local yaw_rad = (to_local_yaw + 90) * math.pi / 180
+            local left_pt  = {x = head.x + math.cos(yaw_rad) * offset, y = head.y + math.sin(yaw_rad) * offset, z = head.z}
+            local right_pt = {x = head.x - math.cos(yaw_rad) * offset, y = head.y - math.sin(yaw_rad) * offset, z = head.z}
+            table.insert(pts, left and left_pt or right_pt)
+        end
+        return pts
     end
 
-    local confidence = math_min(1.0, math_abs(cover_l - cover_r) * 2)
+    local function best_frac(pts)
+        local best = 0
+        for _, p in ipairs(pts) do
+            local ok, trb = pcall(function()
+                return client.trace_bullet(lp, ex1, ey1, ez1, p.x, p.y, p.z, entity_index)
+            end)
+            if ok and trb and trb.fraction and trb.fraction > best then best = trb.fraction end
+        end
+        if best == 0 then
+            for _, p in ipairs(pts) do
+                local tl = client_trace_line(ex1, ey1, ez1, p.x, p.y, p.z, entity_index)
+                local frac = type(tl) == 'number' and tl or (tl and tl.fraction) or 0
+                if frac > best then best = frac end
+            end
+        end
+        return best
+    end
+
+    local fl = best_frac(sample_face_points(true))
+    local fr = best_frac(sample_face_points(false))
+    local dir = 0
+    if math_abs(fl - fr) > 0.05 then dir = (fr > fl) and 1 or -1 end
+    local confidence = math_min(1.0, math_abs(fl - fr) * 2)
     return {dir = dir, confidence = confidence}
 end
 
@@ -1879,22 +1913,30 @@ local function riptide_correction(animlayers, velocity, player_state, quantum_st
     
     -- === NEURAL NETWORK PREDICTION ===
     local function neural_network_prediction()
+        -- Input normalization (+ weapon/map context) and dropout
+        local weapon = entity_get_player_weapon(entity_get_local_player())
+        local weapon_name = weapon and entity_get_classname(weapon):lower() or 'unknown'
+        local map = (globals.mapname and globals.mapname()) or (client.get_mapname and client.get_mapname()) or 'default'
+        map = tostring(map):lower()
         local inputs = {
-            velocity_magnitude = vector_length(velocity) / 320,
-            current_time_normalized = (current_time % 10) / 10,
+            velocity_magnitude = math_min(1.0, vector_length(velocity) / 300),
+            current_time_normalized = (current_time % 8) / 8,
             player_ducking = player_state.ducking and 1 or 0,
             player_on_ground = player_state.on_ground and 1 or 0,
-            quantum_factor = quantum_state.wave_function_collapse or 0.5
+            quantum_factor = clamp_safe(quantum_state.wave_function_collapse or 0.5, 0, 1),
+            weapon_sniper = (weapon_name:find('awp') or weapon_name:find('ssg') or weapon_name:find('scar') or weapon_name:find('g3')) and 1 or 0,
+            map_compact = (map:find('inferno') or map:find('nuke')) and 1 or 0
         }
+        local dropout_mask = {1, 1, 1, 1, 1, (math.random() > 0.15) and 1 or 0, (math.random() > 0.15) and 1 or 0}
         
         -- Simple neural network simulation
         local hidden_layer_1 = {}
-        local weights_1 = {0.7, -0.3, 0.9, 0.2, 0.5}
-        local bias_1 = 0.1
+        local weights_1 = {0.7, -0.3, 0.9, 0.2, 0.5, -0.2, 0.3}
+        local bias_1 = 0.05
         
         for i = 1, 3 do
             local sum = bias_1
-            local input_names = {"velocity_magnitude", "current_time_normalized", "player_ducking", "player_on_ground", "quantum_factor"}
+            local input_names = {"velocity_magnitude", "current_time_normalized", "player_ducking", "player_on_ground", "quantum_factor", "weapon_sniper", "map_compact"}
             local input_idx = 1
             for j, input_val in pairs(inputs) do
                 for k, name in ipairs(input_names) do
@@ -1903,8 +1945,9 @@ local function riptide_correction(animlayers, velocity, player_state, quantum_st
                         break
                     end
                 end
-                local weight_idx = ((i - 1) * 5 + input_idx) % #weights_1 + 1
-                sum = sum + input_val * weights_1[weight_idx]
+                local weight_idx = ((i - 1) * #input_names + input_idx) % #weights_1 + 1
+                local masked_val = input_val * (dropout_mask[input_idx] or 1)
+                sum = sum + masked_val * weights_1[weight_idx]
                 input_idx = input_idx + 1
             end
             hidden_layer_1[i] = math.tanh(sum)
@@ -1915,8 +1958,8 @@ local function riptide_correction(animlayers, velocity, player_state, quantum_st
         for i = 1, 3 do
             output = output + hidden_layer_1[i] * output_weights[i]
         end
-        
-        correction_result.neural_network_prediction = math.tanh(output) * 25
+        -- scale to 58 cap with conservative factor, reduce overfit influence
+        correction_result.neural_network_prediction = clamp_safe(math.tanh(output) * 20, -20, 20)
         return correction_result.neural_network_prediction
     end
     
@@ -6445,15 +6488,53 @@ local function resolve_lc_prediction(entity_index)
     if avg_latency > 0.07 then net_dt = net_dt * 0.8 end
     local ticks_to_predict = math.min(15, math.ceil(net_dt / globals_tickinterval()) + 1)
 
-    -- Network-aware forward prediction (2D + gravity) with neck/torso fallback
+    -- Network-aware forward prediction (2D + gravity) with neck/torso fallback + simple collision/ladder handling
     local dt = ticks_to_predict * globals_tickinterval()
-    local predicted_origin = get_hitbox_center(entity_index, 0)  -- start from head; consider torso if head blocked later
+    local predicted_origin = get_hitbox_center(entity_index, 0)
     -- horizontal (lerp 2D for smoother anticipation)
     predicted_origin.x = predicted_origin.x + velocity.x * dt * 0.9
     predicted_origin.y = predicted_origin.y + velocity.y * dt * 0.9
     -- vertical with simple gravity compensation (slightly conservative)
-    local vz = velocity.z - physics_constants.gravity * dt * 0.45
+    local flags = entity_get_prop(entity_index, 'm_fFlags') or 0
+    local on_ladder = bit.band(flags, 0x40) == 0x40
+    local vz = velocity.z
+    if not on_ladder then
+        vz = vz - physics_constants.gravity * dt * 0.45
+    end
     predicted_origin.z = predicted_origin.z + vz * dt
+    -- basic collision-aware nudge: if direct center blocked, nudge to best visible face point
+    do
+        local e1, e2, e3 = client.eye_position()
+        local ex1, ey1, ez1 = (type(e1) == 'number') and e1 or (e1 and e1[1]), (type(e1) == 'number') and e2 or (e1 and e1[2]), (type(e1) == 'number') and e3 or (e1 and e1[3])
+        if ex1 and predicted_origin then
+            local bbox = get_hitbox_bbox_via_studio and get_hitbox_bbox_via_studio(entity_index, 0)
+            local best_p, best_f = predicted_origin, 0
+            local pts = bbox and { {x=bbox.center.x,y=bbox.center.y,z=bbox.center.z}, {x=bbox.mins.x,y=bbox.center.y,z=bbox.center.z}, {x=bbox.maxs.x,y=bbox.center.y,z=bbox.center.z} } or get_hitbox_face_points(entity_index, 0)
+            for _, p in ipairs(pts) do
+                local ok, trb = pcall(function()
+                    return client.trace_bullet(entity_get_local_player(), ex1, ey1, ez1, p.x, p.y, p.z, entity_index)
+                end)
+                local frac = (ok and trb and trb.fraction) or 0
+                if frac > best_f then best_f, best_p = frac, p end
+            end
+            if best_f < 0.3 then
+                local chest_pts = get_hitbox_face_points(entity_index, 5)
+                for _, p in ipairs(chest_pts) do
+                    local ok, trb = pcall(function()
+                        return client.trace_bullet(entity_get_local_player(), ex1, ey1, ez1, p.x, p.y, p.z, entity_index)
+                    end)
+                    local frac = (ok and trb and trb.fraction) or 0
+                    if frac > best_f then best_f, best_p = frac, p end
+                end
+            end
+            if best_p then
+                local pull = (avg_latency > 0.07) and 0.35 or 0.22
+                predicted_origin.x = predicted_origin.x + (best_p.x - predicted_origin.x) * pull
+                predicted_origin.y = predicted_origin.y + (best_p.y - predicted_origin.y) * pull
+                predicted_origin.z = predicted_origin.z + (best_p.z - predicted_origin.z) * pull
+            end
+        end
+    end
     
         -- Visibility-aware correction: nudge towards nearest visible point
     -- Normalize eye position (API may return numbers or table)
