@@ -6149,18 +6149,13 @@ local function resolve_aisetpos(entity_index)
             ex1, ey1, ez1 = e1[1], e1[2], e1[3]
         end
         if ex1 then
-            local head = (entity.hitbox_position and ({pcall(entity.hitbox_position, entity_index, 0)}) or {})
-            local hx, hy, hz
-            if head[1] and head[2] then hx, hy, hz = head[2], head[3], head[4] end
-            if not hx then
-                hx, hy, hz = entity_get_origin(entity_index)
-                hz = (hz or 0) + 64
-            end
+            local bbox = get_hitbox_bbox_via_studio and get_hitbox_bbox_via_studio(entity_index, 0)
+            local center = (bbox and bbox.center) or get_hitbox_center(entity_index, 0)
             local off = 10
             local ly = math_rad(normalize_angle_safe(resolved_yaw - base_desync))
             local ry = math_rad(normalize_angle_safe(resolved_yaw + base_desync))
-            local lpos = {x = hx + math_cos(ly) * off, y = hy + math_sin(ly) * off, z = hz}
-            local rpos = {x = hx + math_cos(ry) * off, y = hy + math_sin(ry) * off, z = hz}
+            local lpos = {x = center.x + math_cos(ly) * off, y = center.y + math_sin(ly) * off, z = center.z}
+            local rpos = {x = center.x + math_cos(ry) * off, y = center.y + math_sin(ry) * off, z = center.z}
             local fl, fr = 0, 0
             local ok_l, tb_l = pcall(function()
                 return client.trace_bullet(entity_get_local_player(), ex1, ey1, ez1, lpos.x, lpos.y, lpos.z, entity_index)
