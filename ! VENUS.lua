@@ -2668,7 +2668,11 @@ local function create_lag_record(entity_index)
         velocity = velocity,
         valid = true,
         animlayers = get_animlayer_data(entity_index),
-        tick = globals_tickcount()
+        tick = globals_tickcount(),
+        hitbox = {
+            head = get_hitbox_center(entity_index, 0),
+            chest = get_hitbox_center(entity_index, 5)
+        }
     }
 end
 
