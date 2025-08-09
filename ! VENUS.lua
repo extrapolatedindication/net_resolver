@@ -5650,6 +5650,35 @@ local function resolve_aisetpos(entity_index)
     end
 
     local data = player_data[entity_index]
+
+    -- Ensure required substructures exist (in case player_data was created minimally elsewhere)
+    if not data.yaw_history then data.yaw_history = {} end
+    if not data.desync_history then data.desync_history = {} end
+    if not data.velocity_history then data.velocity_history = {} end
+    if not data.performance_metrics then
+        data.performance_metrics = {
+            accuracy = 0,
+            consistency = 0,
+            last_update = 0,
+            resolution_quality = 0.0,
+            hit_probability = 0.5,
+            miss_rate = 0.5,
+            adaptive_success = 0.5,
+            network_correlation_accuracy = 0.5
+        }
+    end
+    if not data.behavioral_analysis then
+        data.behavioral_analysis = {
+            aggression = 0.5,
+            predictability = 0.5,
+            adaptation_rate = 0.5,
+            network_sensitivity = 0.5,
+            packet_correlation = 0.0,
+            latency_adaptation = 0.0,
+            jitter_resistance = 0.5
+        }
+    end
+
     local current_record = records[1]
     local velocity_data = vector_new(entity_get_prop(entity_index, "m_vecVelocity"))
     
