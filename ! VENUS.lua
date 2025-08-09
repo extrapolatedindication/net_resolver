@@ -127,7 +127,35 @@ local function normalize_angle_safe(angle)
     return safe_angle
 end
 
--- Исправленная функция vector_new для правильной обработки entity_get_origin
+-- Global freestand bias helper for other scripts
+function compute_freestand_bias(entity_index)
+    local lp = entity_get_local_player()
+    if not lp then return {dir = 0, confidence = 0} end
+    local ex, ey, ez = entity_get_origin(entity_index)
+    local lx, ly, lz = entity_get_origin(lp)
+    if not ex or not lx then return {dir = 0, confidence = 0} end
+
+    local to_local_yaw = math_deg(math_atan2(ly - ey, lx - ex))
+    local yaw_rad = (to_local_yaw + 90) * math.pi / 180
+    local head = {x = ex, y = ey, z = ez + 64}
+    local offset = 12
+    local left = {x = head.x + math.cos(yaw_rad) * offset, y = head.y + math.sin(yaw_rad) * offset, z = head.z}
+    local right = {x = head.x - math.cos(yaw_rad) * offset, y = head.y - math.sin(yaw_rad) * offset, z = head.z}
+
+    local eye = client_eye_position()
+    if not eye or not eye[1] then return {dir = 0, confidence = 0} end
+    local ex1, ey1, ez1 = eye[1], eye[2], eye[3]
+
+    local tl = client.trace_line(ex1, ey1, ez1, left.x, left.y, left.z, entity_index) or {fraction = 1}
+    local tr = client.trace_line(ex1, ey1, ez1, right.x, right.y, right.z, entity_index) or {fraction = 1}
+    local cover_l = 1 - (tl.fraction or 1)
+    local cover_r = 1 - (tr.fraction or 1)
+
+    local dir = 0
+    if cover_l > cover_r + 0.05 then dir = 1 elseif cover_r > cover_l + 0.05 then dir = -1 end
+    local confidence = math_min(1.0, math_abs(cover_l - cover_r) * 2)
+    return {dir = dir, confidence = confidence}
+end
 
 -- Также исправим функцию vector_new для более надежной работы
 local function vector_new(x, y, z)
@@ -6220,7 +6248,6 @@ client.set_event_callback("player_hurt", on_player_hurt)
 client.set_event_callback("weapon_fire", on_weapon_fire)
 client.set_event_callback("round_start", on_round_start)
 client.set_event_callback("paint", process_frame)
-
 -- === NEURAL NETWORK ENHANCEMENT SYSTEM ===
 -- Встроенная система машинного обучения для улучшения резольвера
 local function create_neural_network(config)
