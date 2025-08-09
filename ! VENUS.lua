@@ -5856,23 +5856,6 @@ local function resolve_aisetpos(entity_index)
         end
     end
     
-    -- Apply learned side bias (stickiness)
-    data.resolver_memory = data.resolver_memory or {side_stats = {left = {hits=0,shots=0}, right={hits=0,shots=0}}}
-    local recent_dir, age = get_recent_direction(entity_index, 0.3)
-    if recent_dir ~= 0 and (direction_data.prediction_strength or 0.5) < 0.7 then
-        direction_data.final_direction = recent_dir
-        direction_data.prediction_strength = (direction_data.prediction_strength or 0.5) + 0.1
-    end
-
-    -- Apply learned long-term bias
-    local l = data.resolver_memory.side_stats.left
-    local r = data.resolver_memory.side_stats.right
-    local left_acc = (l.hits or 0) / math.max(1, l.shots or 0)
-    local right_acc = (r.hits or 0) / math.max(1, r.shots or 0)
-    if math.abs(left_acc - right_acc) > 0.25 then
-        direction_data.final_direction = (left_acc > right_acc) and -1 or 1
-    end
-
     -- Apply jitter analysis
     if jitter_analysis.is_wide_jitter then
         local jitter_correction = jitter_analysis.desync_correction
@@ -6145,9 +6128,6 @@ local function on_player_hurt(e)
             local hit_ratio = player_data[victim_id].shots_hit / math.max(player_data[victim_id].shots_fired or 0, 1)
             local player_name = entity_get_player_name(victim_id)
 
-            -- Learn resolver side
-            record_side_stat(victim_id, true)
-            
             debug_log(string.format(
                 "[RESOLVER HIT] Player: %s | Hit Ratio: %.2f%% | Shots: %d/%d",
                 player_name or "Unknown", hit_ratio * 100, player_data[victim_id].shots_hit, player_data[victim_id].shots_fired or 0
@@ -6166,8 +6146,6 @@ local function on_weapon_fire(e)
         for entity_index, data in pairs(player_data) do
             if entity_is_alive(entity_index) and entity_is_enemy(entity_index) then
                 data.shots_fired = (data.shots_fired or 0) + 1
-                -- Learn resolver side on shot (miss/hit decided later)
-                record_side_stat(entity_index, false)
             end
         end
     end
