@@ -899,18 +899,14 @@ end
 
 -- Простая функция анализа десинка для вашего кода
 local function analyze_desync_angle(entity_index)
-    if not entity_index then return 0 end
-    
-    local data = resolver_data[entity_index]
-    if not data then
-        return 0
-    end
-    
-    -- Исправленное получение углов
-    local eye_angles_y = entity_get_prop(entity_index, "m_angEyeAngles[1]") or 
-                        entity_get_prop(entity_index, "m_angEyeAngles", 1) or 0
-    local lower_body_yaw = entity_get_prop(entity_index, "m_flLowerBodyYawTarget") or eye_angles_y
-    local velocity = entity_get_prop(entity_index, "m_vecVelocity")
+    if not entity_index or not entity_is_alive(entity_index) or entity_is_dormant(entity_index) then return 0 end
+
+    local eye_angles_y = safe_number(
+        entity_get_prop(entity_index, "m_angEyeAngles[1]") or entity_get_prop(entity_index, "m_angEyeAngles", 1),
+        0
+    )
+    local lower_body_yaw = safe_number(entity_get_prop(entity_index, "m_flLowerBodyYawTarget"), eye_angles_y)
+    local velocity = entity_get_prop(entity_index, "m_vecVelocity") or {x = 0, y = 0, z = 0}
     
     local current_yaw = eye_angles_y
     local current_lby = lower_body_yaw
@@ -2509,16 +2505,16 @@ end
 local function create_lag_record(entity_index)
     local origin_x, origin_y, origin_z = entity_get_origin(entity_index)
     
-    -- Исправленное получение углов
-    local angles_y = entity_get_prop(entity_index, "m_angEyeAngles[1]") or 
-                    entity_get_prop(entity_index, "m_angEyeAngles", 1) or 0
-    local angles_x = entity_get_prop(entity_index, "m_angEyeAngles[0]") or 
-                    entity_get_prop(entity_index, "m_angEyeAngles", 0) or 0
+    -- Исправленное получение углов с безопасными фолбэками
+    local raw_angles_y = entity_get_prop(entity_index, "m_angEyeAngles[1]") or entity_get_prop(entity_index, "m_angEyeAngles", 1)
+    local angles_x = entity_get_prop(entity_index, "m_angEyeAngles[0]") or entity_get_prop(entity_index, "m_angEyeAngles", 0) or 0
+    local lower_body_yaw_fallback = entity_get_prop(entity_index, "m_flLowerBodyYawTarget")
+    local angles_y = raw_angles_y or lower_body_yaw_fallback or 0
     
     local velocity_data = entity_get_prop(entity_index, "m_vecVelocity")
     
     local origin = vector_new(origin_x, origin_y, origin_z)
-    local angles = {x = angles_x, y = angles_y, z = 0}
+    local angles = {x = normalize_angle_safe(angles_x), y = normalize_angle_safe(angles_y), z = 0}
     local velocity = vector_new(velocity_data)
     
     local simulation_time = entity_get_prop(entity_index, "m_flSimulationTime")
@@ -2529,6 +2525,11 @@ local function create_lag_record(entity_index)
     -- Получаем дополнительные данные для лучшего анализа
     local lower_body_yaw = entity_get_prop(entity_index, "m_flLowerBodyYawTarget") or angles.y
     
+    -- Drop invalid angle records to avoid yaw=0 spam
+    if angles.y == 0 and (not raw_angles_y) and (not lower_body_yaw_fallback) then
+        return nil
+    end
+
     return {
         origin = origin,
         angles = angles,
@@ -5459,7 +5460,10 @@ local function resolve_aisetpos(entity_index)
     end
     
     local records = lag_records[entity_index]
-    if not records or #records < 3 then return 0 end
+    if not records or #records < 3 then
+        local fallback_yaw = entity_get_prop(entity_index, "m_angEyeAngles[1]") or entity_get_prop(entity_index, "m_angEyeAngles", 1) or 0
+        return normalize_angle_safe(fallback_yaw)
+    end
 
     local player_name = entity_get_player_name(entity_index)
     if not player_name then return 0 end
@@ -5570,10 +5574,33 @@ local function resolve_aisetpos(entity_index)
     end
     
     -- Calculate base desync
-    local resolved_yaw = current_record.angles.y
-    local base_desync = analyze_desync_angle(entity_index)
+    local resolved_yaw = safe_number(current_record.angles and current_record.angles.y, 0)
+
+    -- Prefer animation-based dynamic desync when possible
+    local dynamic_desync = 0
+    if current_record.animlayers and current_record.velocity then
+        dynamic_desync = math.abs(analyze_movement_layers(current_record.animlayers, current_record.velocity, {
+            moving = vector_length(current_record.velocity) > 5,
+            on_ground = bit.band(current_record.flags or 0, 1) == 1,
+            ducking = (current_record.duck_amount or 0) > 0.1
+        }))
+    end
+
+    local lby_desync = analyze_desync_angle(entity_index)
+    local base_desync = math.max(dynamic_desync or 0, lby_desync or 0)
+
     if base_desync == nil or base_desync <= 0 then
-        base_desync = 25
+        -- fallback to recent history variance
+        if data and data.desync_history and #data.desync_history >= 3 then
+            local sum = 0
+            local n = math.min(6, #data.desync_history)
+            for i = #data.desync_history - n + 1, #data.desync_history do
+                sum = sum + math.abs(data.desync_history[i])
+            end
+            base_desync = math.min(60, (sum / n))
+        else
+            base_desync = 25
+        end
     end
     
     -- Apply jitter analysis
@@ -5625,8 +5652,7 @@ local function resolve_aisetpos(entity_index)
             network_influenced = jitter_analysis.classification_data and 
                 jitter_analysis.classification_data.network_influenced or false,
             latency_compensation = network_info and network_info.latency and 
-                ((network_info.latency.incoming + network_info.latency.outgoing) / 2) > 0.05 and
-                ((network_info.latency.incoming + network_info.latency.outgoing) / 2) or 0,
+                (((network_info.latency.incoming + network_info.latency.outgoing) / 2) or 0),
             packet_correlation = jitter_analysis.packet_correlation or 0
         })
         
@@ -5707,10 +5733,15 @@ local function resolve_aisetpos(entity_index)
         (quality_factors.network_stability * 0.3) +
         (quality_factors.packet_correlation * 0.2) +
         (quality_factors.prediction_accuracy * 0.1)
+
+    -- Update desync history for future dynamic estimation
+    data.desync_history = data.desync_history or {}
+    table_insert(data.desync_history, base_desync)
+    if #data.desync_history > 32 then table.remove(data.desync_history, 1) end
     
     -- Anti-detection variance
     local time_variance = math.sin(globals.curtime() * 1.7 + entity_index) * 1.5
-    resolved_yaw = resolved_yaw + time_variance
+    resolved_yaw = normalize_angle_safe(resolved_yaw + time_variance)
     
     -- Debug logging
     if riptide_v3_debug and ui.get(riptide_v3_debug) then
@@ -6680,7 +6711,8 @@ function resolve_aisetpos(entity_index)
     
     local records = lag_records[entity_index]
     if not records or #records < 2 then
-        return original_resolve_aisetpos(entity_index)
+        local fallback_yaw = entity_get_prop(entity_index, "m_angEyeAngles[1]") or entity_get_prop(entity_index, "m_angEyeAngles", 1) or 0
+        return normalize_angle_safe(fallback_yaw)
     end
     
     -- Multi-method resolver approach
@@ -6802,7 +6834,7 @@ function resolve_aisetpos(entity_index)
     
     -- Anti-detection variance
     local time_variance = math.sin(globals.curtime() * 1.7 + entity_index) * 1.5
-    resolved_yaw = resolved_yaw + time_variance  -- Используем resolved_yaw
+    resolved_yaw = normalize_angle_safe(resolved_yaw + time_variance)  -- Используем resolved_yaw
     
     return normalize_angle_safe(resolved_yaw)  -- Возвращаем resolved_yaw
 end
