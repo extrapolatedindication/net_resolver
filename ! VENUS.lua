@@ -6180,6 +6180,54 @@ local function resolve_aisetpos(entity_index)
     return normalize_angle_safe(safe_number(resolved_yaw, current_record.angles.y or 0))
 end
     
+-- Hitbox face points (early helper) using bones basis or fallback
+local function get_hitbox_face_points(entity_index, hitbox_id)
+    hitbox_id = hitbox_id or 0
+    -- center via hitbox_position
+    local cx, cy, cz
+    if entity.hitbox_position then
+        local ok, x, y, z = pcall(entity.hitbox_position, entity_index, hitbox_id)
+        if ok and x then cx, cy, cz = x, y, z end
+    end
+    if not cx then
+        local ox, oy, oz = entity.get_origin(entity_index)
+        cx, cy, cz = ox or 0, oy or 0, (oz or 0) + (hitbox_id == 0 and 64 or 48)
+    end
+    local center = {x = cx, y = cy, z = cz}
+    -- basis via bones (best effort)
+    local bones
+    local ok_b, b = pcall(function() return get_bones_cached and get_bones_cached(entity_index) or nil end)
+    if ok_b then bones = b end
+    local mat
+    if bones and bones[0] then
+        for _, bone in ipairs({8,7,6}) do
+            if bones[bone] then mat = bones[bone]; break end
+        end
+    end
+    local right, forward, up
+    if mat then
+        right   = {x = mat[0][0], y = mat[1][0], z = mat[2][0]}
+        forward = {x = mat[0][1], y = mat[1][1], z = mat[2][1]}
+        up      = {x = mat[0][2], y = mat[1][2], z = mat[2][2]}
+    else
+        right, forward, up = {x=1,y=0,z=0}, {x=0,y=1,z=0}, {x=0,y=0,z=1}
+    end
+    local ex, ey, ez = 5, 5, 7
+    local pts = {}
+    local function add(p) table.insert(pts, p) end
+    add(vec_add(center, vec_scale(right,  ex)))
+    add(vec_add(center, vec_scale(right, -ex)))
+    add(vec_add(center, vec_scale(forward,  ey)))
+    add(vec_add(center, vec_scale(forward, -ey)))
+    add(vec_add(center, vec_scale(up,  ez)))
+    add(vec_add(center, vec_scale(up, -ez)))
+    add(vec_add(center, vec_add(vec_scale(right, ex), vec_scale(up, ez))))
+    add(vec_add(center, vec_add(vec_scale(right,-ex), vec_scale(up, ez))))
+    add(vec_add(center, vec_add(vec_scale(right, ex), vec_scale(up,-ez))))
+    add(vec_add(center, vec_add(vec_scale(right,-ex), vec_scale(up,-ez))))
+    return pts
+end
+
 -- === IMPROVED LC RESOLVER ===
 local function resolve_lc_prediction(entity_index)
     local records = lag_records[entity_index]
