@@ -7192,7 +7192,7 @@ local function resolve_aisetpos(entity_index)
     end
 
     -- Apply direction with network + freestand compensation
-    local direction = compensated_direction and compensated_direction.final_direction or direction_data.final_direction
+    local direction = (compensated_direction and compensated_direction.final_direction) or (direction_data and direction_data.final_direction) or 1
     if freestand and freestand.confidence > 0.2 then
         direction = freestand.dir ~= 0 and freestand.dir or direction
     end
@@ -7327,10 +7327,15 @@ local function resolve_aisetpos(entity_index)
         end
     end
         
+        -- Final safety check for direction variable
+        if not direction or type(direction) ~= "number" then
+            direction = 1 -- fallback to default direction
+        end
+        
         -- Network-based direction adjustment
         if network_info and network_info.network_jitter_detected then
             local packet_correlation = jitter_analysis.packet_correlation or 0
-            if packet_correlation > 0.5 then
+            if packet_correlation > 0.5 and direction then
                 direction = direction * (packet_correlation > 0.7 and -1 or 1)
             end
         end
@@ -7352,19 +7357,25 @@ local function resolve_aisetpos(entity_index)
         end
         
         base_desync = compensated_desync * network_desync_modifier
-        resolved_yaw = resolved_yaw + (direction * base_desync)
+        if direction then
+            resolved_yaw = resolved_yaw + (direction * base_desync)
+        else
+            resolved_yaw = resolved_yaw + base_desync -- fallback без направления
+        end
         
         -- Store direction with network context
-        table.insert(data.direction_memory.last_directions, {
-            direction = direction,
-            correction = base_desync,
-            timestamp = globals.curtime(),
-            network_influenced = jitter_analysis.classification_data and 
-                jitter_analysis.classification_data.network_influenced or false,
-            latency_compensation = network_info and network_info.latency and 
-                (((network_info.latency.incoming + network_info.latency.outgoing) / 2) or 0),
-            packet_correlation = jitter_analysis.packet_correlation or 0
-        })
+        if direction then
+            table.insert(data.direction_memory.last_directions, {
+                direction = direction,
+                correction = base_desync,
+                timestamp = globals.curtime(),
+                network_influenced = jitter_analysis.classification_data and 
+                    jitter_analysis.classification_data.network_influenced or false,
+                latency_compensation = network_info and network_info.latency and 
+                    (((network_info.latency.incoming + network_info.latency.outgoing) / 2) or 0),
+                packet_correlation = jitter_analysis.packet_correlation or 0
+            })
+        end
         
         while #data.direction_memory.last_directions > 10 do
             table.remove(data.direction_memory.last_directions, 1)
@@ -7427,7 +7438,11 @@ local function resolve_aisetpos(entity_index)
             local final_desync = base_desync + (matrix_correction * 0.35)
             
             -- Обновляем resolved_yaw с коррекцией от матрицы
-            resolved_yaw = resolved_yaw + (direction * matrix_correction * 0.35)
+            if direction then
+                resolved_yaw = resolved_yaw + (direction * matrix_correction * 0.35)
+            else
+                resolved_yaw = resolved_yaw + (matrix_correction * 0.35) -- fallback без направления
+            end
             
             -- Улучшаем качество резольвинга на основе анализа матрицы
             data.performance_metrics.resolution_quality = math.min(1.0, 
