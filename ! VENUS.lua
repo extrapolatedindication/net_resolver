@@ -5221,7 +5221,7 @@ end
 -- === ADVANCED BACKTRACK SCORING SYSTEM ===
 -- Улучшенная система оценки backtrack записей для лучших попаданий
 
-local function calculate_advanced_backtrack_score(record, entity_index)
+function calculate_advanced_backtrack_score(record, entity_index)
     if not record or not entity_index then return 0 end
     
     local score = 0
@@ -5251,55 +5251,136 @@ local function calculate_advanced_backtrack_score(record, entity_index)
         return 0  -- Too old
     end
     
-    -- === 2. HITBOX ACCURACY SCORING ===
+    -- === 2. HITBOX MATRIX ENHANCED ACCURACY SCORING ===
     local my_eye_pos = client.eye_position()
     if my_eye_pos and record.origin then
-        -- Use hitbox head if available
-        local head = get_hitbox_center(entity_index, 0)
-        local target_head = {
-            x = head.x ~= 0 and head.x or record.origin.x,
-            y = head.y ~= 0 and head.y or record.origin.y,
-            z = head.z ~= 0 and head.z or (record.origin.z + 64)
-        }
+        local target_head = nil
         
-        local distance = vector_distance(my_eye_pos, target_head)
-        
-        -- Distance-based scoring (closer = better for backtrack)
-        if distance < 500 then
-            score = score + 100
-        elseif distance < 1000 then
-            score = score + 80
-        elseif distance < 2000 then
-            score = score + 60
-        else
-            score = score + 40
-        end
-        
-        -- === BULLET TRACE FOR VISIBILITY === (prefer bbox face multi-point)
-        local function score_target_point(pt)
-            local ox, oy, oz = my_eye_pos[1], my_eye_pos[2], my_eye_pos[3]
-            local ok, trb = pcall(function()
-                return client.trace_bullet(entity_get_local_player(), ox, oy, oz, pt.x, pt.y, pt.z, entity_index)
-            end)
-            if ok and trb then return trb.fraction or 0 end
-            local tl = client.trace_line(ox, oy, oz, pt.x, pt.y, pt.z, entity_index)
-            if type(tl) == 'number' then return tl end
-            return (tl and tl.fraction) or 0
-        end
-        local function best_face_visibility(hitbox_id)
-            local bbox = get_hitbox_bbox_via_studio and get_hitbox_bbox_via_studio(entity_index, hitbox_id)
-            if bbox and bbox.mins and bbox.maxs and bbox.center then
-                local cx, cy, cz = bbox.center.x, bbox.center.y, bbox.center.z
-                local mx, my, mz = bbox.mins.x, bbox.mins.y, bbox.mins.z
-                local Mx, My, Mz = bbox.maxs.x, bbox.maxs.y, bbox.maxs.z
-                local pts = {
-                    {x = cx, y = cy, z = cz},
-                    {x = mx, y = cy, z = cz}, {x = Mx, y = cy, z = cz},
-                    {x = cx, y = my, z = cz}, {x = cx, y = My, z = cz},
-                    {x = cx, y = cy, z = mz}, {x = cx, y = cy, z = Mz}
+        -- Use hitbox matrix for precise head position if available
+        if hitbox_matrix_resolving and hitbox_matrix_resolving.get() then
+            local matrix_head = get_hitbox_world_coords(entity_index, 0)
+            if matrix_head then
+                target_head = matrix_head
+                -- Bonus for matrix-based positioning
+                score = score + 50
+            else
+                -- Fallback to traditional method
+                local head = get_hitbox_center(entity_index, 0)
+                target_head = {
+                    x = head.x ~= 0 and head.x or record.origin.x,
+                    y = head.y ~= 0 and head.y or record.origin.y,
+                    z = head.z ~= 0 and head.z or (record.origin.z + 64)
                 }
-                local best = 0
-                for _, p in ipairs(pts) do
+            end
+        else
+            -- Traditional hitbox method
+            local head = get_hitbox_center(entity_index, 0)
+            target_head = {
+                x = head.x ~= 0 and head.x or record.origin.x,
+                y = head.y ~= 0 and head.y or record.origin.y,
+                z = head.z ~= 0 and head.z or (record.origin.z + 64)
+            }
+        end
+        
+        if target_head then
+            local distance = vector_distance(my_eye_pos, target_head)
+            
+            -- Distance-based scoring (closer = better for backtrack)
+            if distance < 500 then
+                score = score + 100
+            elseif distance < 1000 then
+                score = score + 80
+            elseif distance < 2000 then
+                score = score + 60
+            else
+                score = score + 40
+            end
+            
+            -- === HITBOX MATRIX ENHANCED VISIBILITY SCORING ===
+            local function score_target_point_via_matrix(pt)
+                local ox, oy, oz = my_eye_pos[1], my_eye_pos[2], my_eye_pos[3]
+                
+                -- Use hitbox matrix intersection analysis if available
+                if hitbox_matrix_resolving and hitbox_matrix_resolving.get() then
+                    local intersection = analyze_hitbox_intersection_via_matrix(entity_index, 0, {x = ox, y = oy, z = oz}, pt)
+                    if intersection and intersection.fraction then
+                        return intersection.fraction
+                    end
+                end
+                
+                -- Fallback to traditional methods
+                local ok, trb = pcall(function()
+                    return client.trace_bullet(entity_get_local_player(), ox, oy, oz, pt.x, pt.y, pt.z, entity_index)
+                end)
+                if ok and trb then return trb.fraction or 0 end
+                local tl = client.trace_line(ox, oy, oz, pt.x, pt.y, pt.z, entity_index)
+                if type(tl) == 'number' then return tl end
+                return (tl and tl.fraction) or 0
+            end
+            
+            local function best_face_visibility_enhanced(hitbox_id)
+                -- Use hitbox matrix validation if available
+                if hitbox_matrix_resolving and hitbox_matrix_resolving.get() then
+                    local matrix_validation = validate_hitbox_via_matrix(entity_index, hitbox_id, {-15, 0, 15})
+                    if matrix_validation and matrix_validation.confidence > 0.7 then
+                        -- Use matrix-based hitbox data
+                        local matrix_bbox = get_hitbox_matrix_precise(entity_index, hitbox_id)
+                        if matrix_bbox then
+                            local cx, cy, cz = matrix_bbox.center.x, matrix_bbox.center.y, matrix_bbox.center.z
+                            local mx, my, mz = matrix_bbox.mins.x, matrix_bbox.mins.y, matrix_bbox.mins.z
+                            local Mx, My, Mz = matrix_bbox.maxs.x, matrix_bbox.maxs.y, matrix_bbox.maxs.z
+                            local pts = {
+                                {x = cx, y = cy, z = cz},
+                                {x = mx, y = cy, z = cz}, {x = Mx, y = cy, z = cz},
+                                {x = cx, y = my, z = cz}, {x = cx, y = My, z = cz},
+                                {x = cx, y = cy, z = mz}, {x = cx, y = cy, z = Mz}
+                            }
+                            local best = 0
+                            for _, p in ipairs(pts) do
+                                local f = score_target_point_via_matrix(p)
+                                if f > best then best = f end
+                            end
+                            return best
+                        end
+                    end
+                end
+                
+                -- Fallback to traditional method
+                local bbox = get_hitbox_bbox_via_studio and get_hitbox_bbox_via_studio(entity_index, hitbox_id)
+                if bbox and bbox.mins and bbox.maxs and bbox.center then
+                    local cx, cy, cz = bbox.center.x, bbox.center.y, bbox.center.z
+                    local mx, my, mz = bbox.mins.x, bbox.mins.y, bbox.mins.z
+                    local Mx, My, Mz = bbox.maxs.x, bbox.maxs.y, bbox.maxs.z
+                    local pts = {
+                        {x = cx, y = cy, z = cz},
+                        {x = mx, y = cy, z = cz}, {x = Mx, y = cy, z = cz},
+                        {x = cx, y = my, z = cz}, {x = cx, y = My, z = cz},
+                        {x = cx, y = cy, z = mz}, {x = cx, y = cy, z = Mz}
+                    }
+                    local best = 0
+                    for _, p in ipairs(pts) do
+                        local f = score_target_point_via_matrix(p)
+                        if f > best then best = f end
+                    end
+                    return best
+                end
+                return score_target_point_via_matrix(get_hitbox_center(entity_index, hitbox_id))
+            end
+            
+            local head_frac = best_face_visibility_enhanced(0)
+            if head_frac < 0.6 then
+                local chest_frac = best_face_visibility_enhanced(5)
+                if chest_frac > head_frac then head_frac = chest_frac end
+            end
+            if head_frac > 0.9 then
+                score = score + 220
+            elseif head_frac > 0.75 then
+                score = score + 120
+            else
+                score = score - 140
+            end
+        end
+    end do
                     local f = score_target_point(p)
                     if f > best then best = f end
                 end
@@ -5454,8 +5535,8 @@ local function calculate_advanced_backtrack_score(record, entity_index)
     return math.max(0, score)
 end
 
--- === ENHANCED MULTI-RECORD BACKTRACK SELECTION ===
-local function get_best_backtrack_record(entity_index)
+-- === ENHANCED MULTI-RECORD BACKTRACK SELECTION WITH HITBOX MATRIX ===
+function get_best_backtrack_record(entity_index)
     if not entity_index or entity_index == entity_get_local_player() then
         return nil
     end
@@ -5504,6 +5585,35 @@ local function get_best_backtrack_record(entity_index)
     
     if #candidate_records == 0 then
         return nil
+    end
+    
+    -- === HITBOX MATRIX ANALYSIS FOR BACKTRACK ===
+    if hitbox_matrix_resolving and hitbox_matrix_resolving.get() then
+        for i, candidate in ipairs(candidate_records) do
+            local record = candidate.record
+            
+            -- Analyze hitbox matrix for this record
+            local matrix_analysis = analyze_backtrack_record_via_hitbox_matrix(entity_index, record)
+            if matrix_analysis then
+                -- Boost score based on hitbox matrix quality
+                local matrix_boost = matrix_analysis.confidence * 150
+                candidate.score = candidate.score + matrix_boost
+                
+                -- Store matrix data for later use
+                candidate.hitbox_matrix_data = matrix_analysis
+                
+                debug_log(string.format(
+                    "[BT-MATRIX] Record %d | Matrix Confidence: %.2f | Boost: +%.0f | Final Score: %.0f",
+                    i,
+                    matrix_analysis.confidence,
+                    matrix_boost,
+                    candidate.score
+                ))
+            end
+        end
+        
+        -- Re-sort with matrix-enhanced scores
+        table.sort(candidate_records, function(a, b) return a.score > b.score end)
     end
     
     -- === FAKE LAG DETECTION FOR BACKTRACK ===
@@ -5635,8 +5745,8 @@ local function get_best_backtrack_record(entity_index)
         return nil
     end
 end
--- === ENHANCED BACKTRACK APPLICATION WITH INTERPOLATION ===
-local function apply_backtrack_to_target(entity_index, record)
+-- === ENHANCED BACKTRACK APPLICATION WITH HITBOX MATRIX INTEGRATION ===
+function apply_backtrack_to_target(entity_index, record)
     if not record or not entity_index then
         return false
     end
@@ -5656,38 +5766,53 @@ local function apply_backtrack_to_target(entity_index, record)
     local local_player = entity_get_local_player()
     if not local_player then return false end
     
-    -- === POSITION INTERPOLATION FOR MOVING TARGETS ===
+    -- === HITBOX MATRIX ENHANCED POSITION INTERPOLATION ===
     local final_position = record.origin
 
     if record.velocity and record.backtrack_metadata then
         local time_diff = record.backtrack_metadata.time_diff
         local velocity_mag = vec_len2d(record.velocity)
 
-            -- Network-aware forward interpolation (no hard caps)
-    local network_info = network_channel_system:get_network_info()
-    local avg_latency = network_info and (network_info.latency.incoming + network_info.latency.outgoing) / 2 or 0
-    local choke = network_info and (network_info.choke.incoming + network_info.choke.outgoing) / 2 or 0
-    local prediction_horizon = math.min(time_diff, (avg_latency * (1 + choke * 2)))
+        -- Network-aware forward interpolation (no hard caps)
+        local network_info = network_channel_system:get_network_info()
+        local avg_latency = network_info and (network_info.latency.incoming + network_info.latency.outgoing) / 2 or 0
+        local choke = network_info and (network_info.choke.incoming + network_info.choke.outgoing) / 2 or 0
+        local prediction_horizon = math.min(time_diff, (avg_latency * (1 + choke * 2)))
 
-    if velocity_mag > 10 and prediction_horizon > 0 then
-        -- Pull predicted point slightly towards a visible line from eye to reduce wall-misses
-        local predicted = vec_add(record.origin, vec_scale(record.velocity, prediction_horizon))
-        local eye = client.eye_position()
-        if eye then
-            local ex, ey, ez = eye[1], eye[2], eye[3]
-            if ex then
-                local tr = client.trace_line(ex, ey, ez, predicted.x, predicted.y, predicted.z, entity_index)
-                local frac = tr and (tr.fraction or tr) or 1
-                if frac < 0.95 then
-                    local pull = (1 - frac) * 8
-                    local to_eye = vec_normalize({x = ex - predicted.x, y = ey - predicted.y, z = ez - predicted.z})
-                    predicted = vec_add(predicted, vec_scale(to_eye, pull))
+        if velocity_mag > 10 and prediction_horizon > 0 then
+            -- Use hitbox matrix for precise prediction
+            if hitbox_matrix_resolving and hitbox_matrix_resolving.get() then
+                local matrix_prediction = predict_hitbox_via_matrix(entity_index, 0, prediction_horizon, record.velocity)
+                if matrix_prediction and matrix_prediction.position then
+                    final_position = matrix_prediction.position
+                    debug_log(string.format("[BT-MATRIX-INTERP] Matrix prediction: %.3fs | Position: (%.1f, %.1f, %.1f)", 
+                        prediction_horizon, final_position.x, final_position.y, final_position.z))
+                else
+                    -- Fallback to traditional interpolation
+                    local predicted = vec_add(record.origin, vec_scale(record.velocity, prediction_horizon))
+                    final_position = predicted
                 end
+            else
+                -- Traditional interpolation with wall-pull
+                local predicted = vec_add(record.origin, vec_scale(record.velocity, prediction_horizon))
+                local eye = client.eye_position()
+                if eye then
+                    local ex, ey, ez = eye[1], eye[2], eye[3]
+                    if ex then
+                        local tr = client.trace_line(ex, ey, ez, predicted.x, predicted.y, predicted.z, entity_index)
+                        local frac = tr and (tr.fraction or tr) or 1
+                        if frac < 0.95 then
+                            local pull = (1 - frac) * 8
+                            local to_eye = vec_normalize({x = ex - predicted.x, y = ey - predicted.y, z = ez - predicted.z})
+                            predicted = vec_add(predicted, vec_scale(to_eye, pull))
+                        end
+                    end
+                end
+                final_position = predicted
             end
+            
+            debug_log(string.format("[BT-INTERP] Interpolated position by %.3fs (lat: %.3f, choke: %.2f)", prediction_horizon, avg_latency, choke))
         end
-        final_position = predicted
-        debug_log(string.format("[BT-INTERP] Interpolated position by %.3fs (lat: %.3f, choke: %.2f)", prediction_horizon, avg_latency, choke))
-    end
     end
     
     -- === ENHANCED POSITION APPLICATION ===
@@ -5859,8 +5984,8 @@ local function apply_backtrack_to_target(entity_index, record)
     
     return success
 end
--- === BACKTRACK LEARNING SYSTEM ===
-local function update_backtrack_learning(entity_index, shot_hit, record_used)
+-- === ENHANCED BACKTRACK LEARNING SYSTEM WITH HITBOX MATRIX ===
+function update_backtrack_learning(entity_index, shot_hit, record_used)
     local player_data_entry = player_data[entity_index]
     if not player_data_entry or not record_used then return end
     
@@ -5873,7 +5998,21 @@ local function update_backtrack_learning(entity_index, shot_hit, record_used)
         }
     end
     
+    -- Initialize hitbox matrix learning data
+    if not player_data_entry.backtrack_matrix_learning then
+        player_data_entry.backtrack_matrix_learning = {
+            matrix_success_rate = 0.5,
+            matrix_confidence_correlation = 0.5,
+            hitbox_accuracy_trend = 0.5,
+            prediction_reliability_score = 0.5,
+            total_matrix_shots = 0,
+            successful_matrix_shots = 0,
+            last_matrix_update = 0
+        }
+    end
+    
     local bt_history = player_data_entry.backtrack_history
+    local matrix_learning = player_data_entry.backtrack_matrix_learning
     
     -- Update accuracy metrics
     if not bt_history.accuracy_metrics.total_shots then
@@ -5959,11 +6098,65 @@ local function update_backtrack_learning(entity_index, shot_hit, record_used)
     if shot_hit then
         pattern_data.hits = pattern_data.hits + 1
     end
+    
+    -- === HITBOX MATRIX LEARNING INTEGRATION ===
+    if record_used.hitbox_matrix_data then
+        matrix_learning.total_matrix_shots = matrix_learning.total_matrix_shots + 1
+        
+        if shot_hit then
+            matrix_learning.successful_matrix_shots = matrix_learning.successful_matrix_shots + 1
+        end
+        
+        matrix_learning.matrix_success_rate = matrix_learning.successful_matrix_shots / matrix_learning.total_matrix_shots
+        
+        -- Update matrix confidence correlation
+        local matrix_confidence = record_used.hitbox_matrix_data.confidence or 0
+        local confidence_weight = 0.1
+        local confidence_correlation = shot_hit and matrix_confidence or (1 - matrix_confidence)
+        
+        matrix_learning.matrix_confidence_correlation = 
+            matrix_learning.matrix_confidence_correlation * (1 - confidence_weight) + 
+            confidence_correlation * confidence_weight
+        
+        -- Update hitbox accuracy trend
+        if record_used.hitbox_matrix_data.matrix_accuracy then
+            local accuracy_weight = 0.1
+            local accuracy_correlation = shot_hit and record_used.hitbox_matrix_data.matrix_accuracy or (1 - record_used.hitbox_matrix_data.matrix_accuracy)
+            
+            matrix_learning.hitbox_accuracy_trend = 
+                matrix_learning.hitbox_accuracy_trend * (1 - accuracy_weight) + 
+                accuracy_correlation * accuracy_weight
+        end
+        
+        -- Update prediction reliability
+        if record_used.hitbox_matrix_data.prediction_reliability then
+            local reliability_weight = 0.1
+            local reliability_correlation = shot_hit and record_used.hitbox_matrix_data.prediction_reliability or (1 - record_used.hitbox_matrix_data.prediction_reliability)
+            
+            matrix_learning.prediction_reliability_score = 
+                matrix_learning.prediction_reliability_score * (1 - reliability_weight) + 
+                reliability_correlation * reliability_weight
+        end
+        
+        matrix_learning.last_matrix_update = globals.curtime()
+        
+        -- Debug logging for matrix learning
+        if riptide_v5_debug and ui.get(riptide_v5_debug) then
+            debug_log(string.format(
+                "[BT-MATRIX-LEARNING] Entity: %s | Matrix Success Rate: %.2f | Confidence Correlation: %.2f | Accuracy Trend: %.2f | Reliability: %.2f",
+                entity_get_player_name(entity_index) or "Unknown",
+                matrix_learning.matrix_success_rate,
+                matrix_learning.matrix_confidence_correlation,
+                matrix_learning.hitbox_accuracy_trend,
+                matrix_learning.prediction_reliability_score
+            ))
+        end
+    end
 end
 
--- === ENHANCED BACKTRACK PROCESSING V3 ===
--- Революционная система backtrack с машинным обучением и адаптацией
-local function process_backtrack(entity_index)
+-- === ENHANCED BACKTRACK PROCESSING V4 WITH HITBOX MATRIX ===
+-- Революционная система backtrack с машинным обучением, адаптацией и интеграцией hitbox matrix
+function process_backtrack(entity_index)
     local best_record = get_best_backtrack_record(entity_index)
     if not best_record then
         return false
@@ -6053,8 +6246,29 @@ local function process_backtrack(entity_index)
         flags = entity_get_prop(entity_index, "m_fFlags")
     }
     
-    -- === ENHANCED APPLICATION ===
+    -- === HITBOX MATRIX ENHANCED BACKTRACK APPLICATION ===
     local success = apply_backtrack_to_target(entity_index, best_record)
+    
+    -- === HITBOX MATRIX VALIDATION AND LEARNING ===
+    if success and hitbox_matrix_resolving and hitbox_matrix_resolving.get() then
+        local matrix_analysis = analyze_backtrack_record_via_hitbox_matrix(entity_index, best_record)
+        if matrix_analysis then
+            best_record.hitbox_matrix_data = matrix_analysis
+            
+            -- Adjust backtrack intensity based on matrix confidence
+            if matrix_analysis.confidence > 0.8 then
+                backtrack_intensity = backtrack_intensity * 1.2  -- Boost for high confidence
+            elseif matrix_analysis.confidence < 0.4 then
+                backtrack_intensity = backtrack_intensity * 0.8  -- Reduce for low confidence
+            end
+            
+            debug_log(string.format(
+                "[BT-MATRIX-PROCESS] Matrix Confidence: %.2f | Adjusted Intensity: %.2f",
+                matrix_analysis.confidence,
+                backtrack_intensity
+            ))
+        end
+    end
     
     -- Store the record used for learning
     if success then
@@ -6339,6 +6553,30 @@ function should_use_backtrack(entity_index)
         end
     end
     
+    -- === HITBOX MATRIX INTEGRATION FOR BACKTRACK DECISION ===
+    if hitbox_matrix_resolving and hitbox_matrix_resolving.get() then
+        local matrix_analysis = analyze_backtrack_record_via_hitbox_matrix(entity_index, {origin = target_head})
+        if matrix_analysis then
+            -- Use matrix confidence to adjust backtrack decision
+            if matrix_analysis.confidence < 0.3 then
+                -- Very low confidence - avoid backtrack
+                return false
+            elseif matrix_analysis.confidence < 0.6 then
+                -- Low confidence - be more selective
+                local records = lag_records[entity_index]
+                if not records or #records < 5 then
+                    return false
+                end
+            end
+            
+            debug_log(string.format(
+                "[BT-MATRIX-DECISION] Matrix Confidence: %.2f | Backtrack Decision: %s",
+                matrix_analysis.confidence,
+                "ENABLED"
+            ))
+        end
+    end
+    
     -- === PLAYER-SPECIFIC LEARNING ===
     local player_data_entry = player_data[entity_index]
     if player_data_entry and player_data_entry.backtrack_history then
@@ -6508,8 +6746,55 @@ client.set_event_callback("paint", function()
         end
     end
     
-    -- Run main backtrack integration
-    enhanced_backtrack_integration()
+    -- === ENHANCED BACKTRACK INTEGRATION WITH HITBOX MATRIX AND FAKE LAG DETECTION ===
+    -- Run main backtrack integration for all entities
+    for entity_index, _ in pairs(player_data) do
+        if entity_is_alive(entity_index) and entity_is_enemy(entity_index) then
+            -- === FAKE LAG DETECTION INTEGRATION ===
+            local fake_lag_analysis = nil
+            if fake_lag_detection_enabled and fake_lag_detection_enabled.get() then
+                fake_lag_analysis = detect_fake_lag_manipulation(entity_index)
+                if fake_lag_analysis and fake_lag_analysis.manipulation_detected then
+                    debug_log(string.format(
+                        "[BT-FAKE-LAG] Entity %s: %s manipulation detected | Confidence: %.2f",
+                        entity_get_player_name(entity_index) or "Unknown",
+                        fake_lag_analysis.manipulation_type,
+                        fake_lag_analysis.confidence
+                    ))
+                    
+                    -- Apply fake lag compensation to backtrack
+                    if fake_lag_analysis.compensation_needed then
+                        local compensation = apply_fake_lag_compensation(entity_index, fake_lag_analysis)
+                        if compensation then
+                            debug_log(string.format(
+                                "[BT-FAKE-LAG] Applied compensation: %.2f | Type: %s",
+                                compensation.compensation_factor,
+                                compensation.compensation_type
+                            ))
+                        end
+                    end
+                end
+            end
+            
+            local success = enhanced_backtrack_integration(entity_index)
+            if success then
+                -- Update performance metrics
+                backtrack_performance.total_applications = backtrack_performance.total_applications + 1
+                backtrack_performance.successful_applications = backtrack_performance.successful_applications + 1
+                
+                -- Update matrix performance tracking
+                backtrack_performance.matrix_analysis_count = backtrack_performance.matrix_analysis_count + 1
+                
+                -- Store fake lag analysis for learning
+                if fake_lag_analysis then
+                    local player_data_entry = player_data[entity_index]
+                    if player_data_entry then
+                        player_data_entry.last_fake_lag_analysis = fake_lag_analysis
+                    end
+                end
+            end
+        end
+    end
 end)
 
 -- === ENHANCED BACKTRACK PERFORMANCE MONITORING ===
@@ -6521,7 +6806,7 @@ local backtrack_performance = {
     last_reset = globals.curtime()
 }
 
-local function get_backtrack_performance()
+function get_backtrack_performance()
     local current_time = globals.curtime()
     
     -- Reset stats every 5 minutes
@@ -6531,12 +6816,18 @@ local function get_backtrack_performance()
             successful_applications = 0,
             total_shots_with_bt = 0,
             hits_with_bt = 0,
-            last_reset = current_time
+            last_reset = current_time,
+            -- === HITBOX MATRIX PERFORMANCE TRACKING ===
+            matrix_analysis_count = 0,
+            matrix_high_confidence_hits = 0,
+            matrix_low_confidence_hits = 0,
+            matrix_confidence_correlation = 0.5
         }
     end
     
     local success_rate = 0
     local hit_rate = 0
+    local matrix_performance = 0
     
     if backtrack_performance.total_applications > 0 then
         success_rate = backtrack_performance.successful_applications / backtrack_performance.total_applications
@@ -6546,17 +6837,71 @@ local function get_backtrack_performance()
         hit_rate = backtrack_performance.hits_with_bt / backtrack_performance.total_shots_with_bt
     end
     
+    -- === HITBOX MATRIX PERFORMANCE CALCULATION ===
+    if backtrack_performance.matrix_analysis_count > 0 then
+        local high_confidence_hit_rate = 0
+        local low_confidence_hit_rate = 0
+        
+        if backtrack_performance.matrix_high_confidence_hits > 0 then
+            high_confidence_hit_rate = backtrack_performance.matrix_high_confidence_hits / backtrack_performance.matrix_analysis_count
+        end
+        
+        if backtrack_performance.matrix_low_confidence_hits > 0 then
+            low_confidence_hit_rate = backtrack_performance.matrix_low_confidence_hits / backtrack_performance.matrix_analysis_count
+        end
+        
+        -- Calculate matrix performance as weighted average
+        matrix_performance = (high_confidence_hit_rate * 0.7) + (low_confidence_hit_rate * 0.3)
+        
+        -- Update matrix confidence correlation
+        backtrack_performance.matrix_confidence_correlation = 
+            backtrack_performance.matrix_confidence_correlation * 0.9 + 
+            matrix_performance * 0.1
+    end
+    
     return {
         application_success_rate = success_rate,
         hit_rate = hit_rate,
         total_applications = backtrack_performance.total_applications,
-        total_shots = backtrack_performance.total_shots_with_bt
+        total_shots = backtrack_performance.total_shots_with_bt,
+        -- === HITBOX MATRIX PERFORMANCE METRICS ===
+        matrix_performance = matrix_performance,
+        matrix_analysis_count = backtrack_performance.matrix_analysis_count,
+        matrix_confidence_correlation = backtrack_performance.matrix_confidence_correlation
     }
 end
 
--- === BACKTRACK AUTO-ADJUSTMENT SYSTEM ===
-local function auto_adjust_backtrack_settings()
+-- === ENHANCED BACKTRACK AUTO-ADJUSTMENT SYSTEM WITH HITBOX MATRIX ===
+function auto_adjust_backtrack_settings()
     local performance = get_backtrack_performance()
+    
+    -- === HITBOX MATRIX PERFORMANCE ADJUSTMENT ===
+    if performance.matrix_analysis_count > 10 then
+        if performance.matrix_performance < 0.4 then
+            -- Low matrix performance - adjust hitbox matrix settings
+            if hitbox_matrix_resolving and hitbox_matrix_resolving.get() then
+                -- Reduce matrix quality for better performance
+                if hitbox_matrix_quality and hitbox_matrix_quality.get then
+                    local current_quality = hitbox_matrix_quality.get()
+                    if current_quality > 2 then
+                        hitbox_matrix_quality.set(current_quality - 1)
+                        debug_log("[BT-MATRIX-AUTO] Reduced matrix quality for better performance")
+                    end
+                end
+            end
+        elseif performance.matrix_performance > 0.8 then
+            -- High matrix performance - can increase quality
+            if hitbox_matrix_resolving and hitbox_matrix_resolving.get() then
+                if hitbox_matrix_quality and hitbox_matrix_quality.get then
+                    local current_quality = hitbox_matrix_quality.get()
+                    if current_quality < 6 then
+                        hitbox_matrix_quality.set(current_quality + 1)
+                        debug_log("[BT-MATRIX-AUTO] Increased matrix quality for better accuracy")
+                    end
+                end
+            end
+        end
+    end
     
     -- If hit rate is too low, adjust strategy
     if performance.total_shots > 20 and performance.hit_rate < 0.3 then
@@ -6588,6 +6933,244 @@ local function auto_adjust_backtrack_settings()
         
         debug_log("[BT-AUTO] High hit rate detected, increasing precision")
     end
+    
+    -- === MATRIX CONFIDENCE THRESHOLD ADJUSTMENT ===
+    if performance.matrix_confidence_correlation < 0.3 then
+        -- Matrix confidence is not correlating well with actual hits
+        debug_log("[BT-MATRIX-AUTO] Matrix confidence correlation is poor, consider recalibration")
+    end
+end
+
+-- === ENHANCED BACKTRACK INTEGRATION WITH HITBOX MATRIX ===
+-- Функция для интеграции hitbox matrix системы с backtrack
+function enhanced_backtrack_integration(entity_index)
+    if not entity_index or not hitbox_matrix_resolving or not hitbox_matrix_resolving.get() then
+        return false
+    end
+    
+    local records = lag_records[entity_index]
+    if not records or #records < 3 then
+        return false
+    end
+    
+    -- === MATRIX-BASED RECORD VALIDATION ===
+    local validated_records = {}
+    for i, record in ipairs(records) do
+        if record and record.origin then
+            local matrix_validation = validate_hitbox_via_matrix(entity_index, 0, {-15, 0, 15})
+            if matrix_validation and matrix_validation.confidence > 0.5 then
+                table.insert(validated_records, {
+                    record = record,
+                    matrix_confidence = matrix_validation.confidence,
+                    index = i
+                })
+            end
+        end
+    end
+    
+    if #validated_records == 0 then
+        return false
+    end
+    
+    -- Sort by matrix confidence
+    table.sort(validated_records, function(a, b) 
+        return a.matrix_confidence > b.matrix_confidence 
+    end)
+    
+    -- === MATRIX-ENHANCED RECORD SELECTION WITH RIPTIDE V5 ===
+    local best_validated = validated_records[1]
+    if best_validated and best_validated.matrix_confidence > 0.7 then
+        -- === RIPTIDE V5 INTEGRATION ===
+        local riptide_enhancement = nil
+        if best_validated.record.riptide_v5_data then
+            riptide_enhancement = {
+                riptide_factor = best_validated.record.riptide_v5_data.riptide_factor or 0,
+                temporal_stability = best_validated.record.riptide_v5_data.temporal_stability or 0,
+                neural_prediction = best_validated.record.riptide_v5_data.enhanced_neural_network_prediction or 0,
+                quantum_fix = best_validated.record.riptide_v5_data.quantum_entanglement_fix or 0
+            }
+            
+            -- Apply Riptide V5 corrections to matrix confidence
+            local riptide_boost = (riptide_enhancement.riptide_factor * 0.3) + 
+                                 (riptide_enhancement.temporal_stability * 0.25) + 
+                                 (riptide_enhancement.neural_prediction * 0.25) + 
+                                 (riptide_enhancement.quantum_fix * 0.2)
+            
+            local enhanced_confidence = math.min(1.0, best_validated.matrix_confidence + riptide_boost)
+            best_validated.matrix_confidence = enhanced_confidence
+            
+            debug_log(string.format(
+                "[BT-RIPTIDE-V5] Applied Riptide enhancement | Original: %.2f | Enhanced: %.2f | Boost: %.2f",
+                best_validated.matrix_confidence - riptide_boost,
+                enhanced_confidence,
+                riptide_boost
+            ))
+        end
+        
+        -- Use matrix-validated record with Riptide V5 enhancement
+        local success = apply_backtrack_to_target(entity_index, best_validated.record)
+        if success then
+            debug_log(string.format(
+                "[BT-MATRIX-INTEGRATION] Applied matrix-validated record | Confidence: %.2f | Riptide: %s",
+                best_validated.matrix_confidence,
+                riptide_enhancement and "ENHANCED" or "NONE"
+            ))
+            
+            -- Update matrix performance metrics
+            update_matrix_performance_metrics(best_validated.matrix_confidence, true)
+            
+            return true
+        end
+    end
+    
+    return false
+end
+
+-- === MATRIX PERFORMANCE METRICS UPDATE ===
+-- Функция для обновления метрик производительности hitbox matrix
+function update_matrix_performance_metrics(matrix_confidence, was_successful)
+    if not backtrack_performance then return end
+    
+    -- Update matrix analysis count
+    backtrack_performance.matrix_analysis_count = backtrack_performance.matrix_analysis_count + 1
+    
+    -- Categorize by confidence level
+    if matrix_confidence > 0.7 then
+        if was_successful then
+            backtrack_performance.matrix_high_confidence_hits = backtrack_performance.matrix_high_confidence_hits + 1
+        end
+    else
+        if was_successful then
+            backtrack_performance.matrix_low_confidence_hits = backtrack_performance.matrix_low_confidence_hits + 1
+        end
+    end
+    
+    -- Update confidence correlation
+    local current_performance = was_successful and 1.0 or 0.0
+    backtrack_performance.matrix_confidence_correlation = 
+        backtrack_performance.matrix_confidence_correlation * 0.95 + 
+        (matrix_confidence * current_performance) * 0.05
+end
+
+-- === COMPREHENSIVE BACKTRACK ANALYSIS WITH HITBOX MATRIX ===
+-- Функция для комплексного анализа backtrack системы с интеграцией hitbox matrix
+function comprehensive_backtrack_analysis(entity_index)
+    if not entity_index or not hitbox_matrix_resolving or not hitbox_matrix_resolving.get() then
+        return nil
+    end
+    
+    local analysis = {
+        entity_info = {
+            name = entity_get_player_name(entity_index) or "Unknown",
+            health = entity_get_prop(entity_index, "m_iHealth") or 100,
+            armor = entity_get_prop(entity_index, "m_ArmorValue") or 0
+        },
+        backtrack_status = {
+            records_available = 0,
+            best_record_score = 0,
+            time_range = {min = 0, max = 0},
+            matrix_integration = false
+        },
+        hitbox_matrix_status = {
+            head_matrix_available = false,
+            chest_matrix_available = false,
+            overall_confidence = 0,
+            prediction_reliability = 0
+        },
+        riptide_v5_status = {
+            active = false,
+            riptide_factor = 0,
+            temporal_stability = 0,
+            neural_prediction = 0
+        },
+        fake_lag_status = {
+            detected = false,
+            manipulation_type = "none",
+            compensation_applied = false
+        },
+        recommendations = {}
+    }
+    
+    -- === BACKTRACK STATUS ANALYSIS ===
+    local records = lag_records[entity_index]
+    if records and #records > 0 then
+        analysis.backtrack_status.records_available = #records
+        
+        local best_record = get_best_backtrack_record(entity_index)
+        if best_record then
+            analysis.backtrack_status.best_record_score = best_record.score or 0
+            analysis.backtrack_status.matrix_integration = best_record.hitbox_matrix_data ~= nil
+            
+            if best_record.backtrack_metadata and best_record.backtrack_metadata.time_diff then
+                analysis.backtrack_status.time_range.min = math.min(analysis.backtrack_status.time_range.min, best_record.backtrack_metadata.time_diff)
+                analysis.backtrack_status.time_range.max = math.max(analysis.backtrack_status.time_range.max, best_record.backtrack_metadata.time_diff)
+            end
+        end
+    end
+    
+    -- === HITBOX MATRIX STATUS ANALYSIS ===
+    local head_matrix = get_hitbox_matrix_precise(entity_index, 0)
+    local chest_matrix = get_hitbox_matrix_precise(entity_index, 5)
+    
+    if head_matrix then
+        analysis.hitbox_matrix_status.head_matrix_available = true
+        analysis.hitbox_matrix_status.overall_confidence = analysis.hitbox_matrix_status.overall_confidence + 0.5
+    end
+    
+    if chest_matrix then
+        analysis.hitbox_matrix_status.chest_matrix_available = true
+        analysis.hitbox_matrix_status.overall_confidence = analysis.hitbox_matrix_status.overall_confidence + 0.3
+    end
+    
+    -- Test prediction reliability
+    local velocity = vector3(entity_get_prop(entity_index, "m_vecVelocity"))
+    if velocity then
+        local prediction = predict_hitbox_via_matrix(entity_index, 0, 0.1, velocity)
+        if prediction then
+            analysis.hitbox_matrix_status.prediction_reliability = 0.8
+        end
+    end
+    
+    -- === RIPTIDE V5 STATUS ANALYSIS ===
+    local player_data_entry = player_data[entity_index]
+    if player_data_entry and player_data_entry.last_backtrack_record then
+        local record = player_data_entry.last_backtrack_record
+        if record.riptide_v5_data then
+            analysis.riptide_v5_status.active = true
+            analysis.riptide_v5_status.riptide_factor = record.riptide_v5_data.riptide_factor or 0
+            analysis.riptide_v5_status.temporal_stability = record.riptide_v5_data.temporal_stability or 0
+            analysis.riptide_v5_status.neural_prediction = record.riptide_v5_data.enhanced_neural_network_prediction or 0
+        end
+    end
+    
+    -- === FAKE LAG STATUS ANALYSIS ===
+    if fake_lag_detection_enabled and fake_lag_detection_enabled.get() then
+        local fake_lag_analysis = detect_fake_lag_manipulation(entity_index)
+        if fake_lag_analysis and fake_lag_analysis.manipulation_detected then
+            analysis.fake_lag_status.detected = true
+            analysis.fake_lag_status.manipulation_type = fake_lag_analysis.manipulation_type or "unknown"
+            analysis.fake_lag_status.compensation_applied = fake_lag_analysis.compensation_needed or false
+        end
+    end
+    
+    -- === GENERATE RECOMMENDATIONS ===
+    if analysis.backtrack_status.records_available < 3 then
+        table.insert(analysis.recommendations, "Increase backtrack record collection")
+    end
+    
+    if analysis.hitbox_matrix_status.overall_confidence < 0.5 then
+        table.insert(analysis.recommendations, "Improve hitbox matrix accuracy")
+    end
+    
+    if analysis.riptide_v5_status.active and analysis.riptide_v5_status.riptide_factor < 0.3 then
+        table.insert(analysis.recommendations, "Enhance Riptide V5 factors")
+    end
+    
+    if analysis.fake_lag_status.detected and not analysis.fake_lag_status.compensation_applied then
+        table.insert(analysis.recommendations, "Apply fake lag compensation")
+    end
+    
+    return analysis
 end
 
 -- Enhanced pattern-based desync detection
@@ -8249,6 +8832,126 @@ local function create_neural_network(config)
     
     return network
 end
+
+-- === HITBOX MATRIX BACKTRACK ANALYSIS ===
+-- Анализ backtrack записей через hitbox matrix для улучшения точности
+function analyze_backtrack_record_via_hitbox_matrix(entity_index, record)
+    if not entity_index or not record then
+        return nil
+    end
+    
+    if not hitbox_matrix_resolving or not hitbox_matrix_resolving.get() then
+        return nil
+    end
+    
+    local analysis = {
+        confidence = 0,
+        quality_score = 0,
+        hitbox_consistency = 0,
+        matrix_accuracy = 0,
+        prediction_reliability = 0
+    }
+    
+    -- === ANALYZE HITBOX MATRIX CONSISTENCY ===
+    local head_matrix = get_hitbox_matrix_precise(entity_index, 0) -- Head hitbox
+    local chest_matrix = get_hitbox_matrix_precise(entity_index, 5) -- Chest hitbox
+    
+    if head_matrix and chest_matrix then
+        -- Check matrix consistency across different hitboxes
+        local head_center = head_matrix.center
+        local chest_center = chest_matrix.center
+        
+        if head_center and chest_center then
+            -- Calculate expected distance between head and chest
+            local expected_distance = 20.0 -- Approximate head-chest distance
+            local actual_distance = vector_distance(head_center, chest_center)
+            local distance_error = math.abs(actual_distance - expected_distance)
+            
+            -- Score based on anatomical consistency
+            if distance_error < 5 then
+                analysis.hitbox_consistency = 1.0
+            elseif distance_error < 10 then
+                analysis.hitbox_consistency = 0.8
+            elseif distance_error < 15 then
+                analysis.hitbox_consistency = 0.6
+            else
+                analysis.hitbox_consistency = 0.3
+            end
+        end
+    end
+    
+    -- === ANALYZE MATRIX ACCURACY ===
+    if record.origin then
+        local matrix_head_pos = get_hitbox_world_coords(entity_index, 0)
+        if matrix_head_pos then
+            local distance_to_record = vector_distance(record.origin, matrix_head_pos)
+            
+            -- Score based on how well matrix position matches record
+            if distance_to_record < 10 then
+                analysis.matrix_accuracy = 1.0
+            elseif distance_to_record < 25 then
+                analysis.matrix_accuracy = 0.8
+            elseif distance_to_record < 50 then
+                analysis.matrix_accuracy = 0.6
+            else
+                analysis.matrix_accuracy = 0.3
+            end
+        end
+    end
+    
+    -- === ANALYZE PREDICTION RELIABILITY ===
+    if record.velocity then
+        local velocity_mag = vec_len2d(record.velocity)
+        if velocity_mag > 10 then
+            -- Test hitbox matrix prediction
+            local prediction = predict_hitbox_via_matrix(entity_index, 0, 0.1, record.velocity)
+            if prediction and prediction.position then
+                -- Calculate how well prediction matches expected movement
+                local expected_pos = vec_add(record.origin, vec_scale(record.velocity, prediction_horizon))
+                local prediction_error = vector_distance(prediction.position, expected_pos)
+                
+                if prediction_error < 5 then
+                    analysis.prediction_reliability = 1.0
+                elseif prediction_error < 15 then
+                    analysis.prediction_reliability = 0.8
+                elseif prediction_error < 30 then
+                    analysis.prediction_reliability = 0.6
+                else
+                    analysis.prediction_reliability = 0.3
+                end
+            end
+        else
+            -- Static target - high reliability
+            analysis.prediction_reliability = 0.9
+        end
+    end
+    
+    -- === CALCULATE OVERALL CONFIDENCE ===
+    analysis.confidence = (
+        analysis.hitbox_consistency * 0.4 +
+        analysis.matrix_accuracy * 0.35 +
+        analysis.prediction_reliability * 0.25
+    )
+    
+    -- === CALCULATE QUALITY SCORE ===
+    analysis.quality_score = analysis.confidence * 100
+    
+    -- Debug logging
+    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
+        debug_log(string.format(
+            "[BT-MATRIX-ANALYSIS] Entity: %s | Confidence: %.2f | Quality: %.0f | Consistency: %.2f | Accuracy: %.2f | Reliability: %.2f",
+            entity_get_player_name(entity_index) or "Unknown",
+            analysis.confidence,
+            analysis.quality_score,
+            analysis.hitbox_consistency,
+            analysis.matrix_accuracy,
+            analysis.prediction_reliability
+        ))
+    end
+    
+    return analysis
+end
+
 -- Enhanced resolver with neural networks
 local enhanced_resolver = {
     neural_networks = {},
