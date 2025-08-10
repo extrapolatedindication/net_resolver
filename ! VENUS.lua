@@ -5380,17 +5380,10 @@ function calculate_advanced_backtrack_score(record, entity_index)
                 score = score - 140
             end
         end
-    end do
-                    local f = score_target_point(p)
-                    if f > best then best = f end
-                end
-                return best
-            end
-            return score_target_point(get_hitbox_center(entity_index, hitbox_id))
-        end
-        local head_frac = best_face_visibility(0)
+    end
+        local head_frac = best_face_visibility_enhanced(0)
         if head_frac < 0.6 then
-            local chest_frac = best_face_visibility(5)
+            local chest_frac = best_face_visibility_enhanced(5)
             if chest_frac > head_frac then head_frac = chest_frac end
         end
         if head_frac > 0.9 then
@@ -6441,24 +6434,7 @@ function process_backtrack(entity_index)
     return false
 end
 
--- Интеграция backtrack в основную систему
-local function enhanced_backtrack_integration()
-    local enemies = entity_get_all("CCSPlayer")
-    
-    for i = 1, #enemies do
-        local entity_index = enemies[i]
-        
-        if entity_is_alive(entity_index) and not entity_is_dormant(entity_index) then
-            -- Обновляем lag records для этого игрока
-            update_lag_records(entity_index)
-            
-            -- Обрабатываем backtrack если нужно
-            if should_use_backtrack(entity_index) then
-                process_backtrack(entity_index)
-            end
-        end
-    end
-end
+-- Интеграция backtrack в основную систему (удалена дублирующаяся функция)
 
 -- Функция для определения, нужно ли использовать backtrack
 
