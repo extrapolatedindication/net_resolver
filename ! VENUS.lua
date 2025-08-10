@@ -151,7 +151,7 @@ local ui_get = ui.get
 
 -- UI Elements
 
-local riptide_v3_debug = ui.new_checkbox("rage", "other", "Debug Logs")
+local riptide_v5_debug = ui.new_checkbox("rage", "other", "Debug Logs")
 
 -- Core variables and references
 local client_camera_angles = client.camera_angles
@@ -350,7 +350,7 @@ local network_packet_history = {
 
 
 local function debug_log(message)
-    if not ui_get(riptide_v3_debug) then 
+    if not ui_get(riptide_v5_debug) then 
         return 
     end
     
@@ -371,7 +371,7 @@ local function debug_log(message)
     client.log(full_message)
     
     -- Optional: Print to screen
-    if ui.get(riptide_v3_debug) then
+    if ui.get(riptide_v5_debug) then
         client.draw_debug_text(10, 60 + (#debug_logs * 14), 255, 255, 255, 255, full_message)
     end
 end
@@ -1596,7 +1596,7 @@ local function wide_jitter_detection(entity_index, angle_history)
     jitter_cache[cache_key] = {timestamp = current_time, result = jitter_result}
     return jitter_result
 end
--- === ULTRA ENHANCED RIPTIDE CORRECTION SYSTEM V4 ===
+-- === ULTRA ENHANCED RIPTIDE CORRECTION SYSTEM V5 ===
 local function riptide_correction(animlayers, velocity, player_state, quantum_state, network_data, entity_index)
     if not animlayers or not velocity or not player_state then
         return {
@@ -1631,8 +1631,8 @@ local function riptide_correction(animlayers, velocity, player_state, quantum_st
         velocity_desync_correlation = 0,
         adaptive_compensation = 0,
         
-        -- === V3 РЕВОЛЮЦИОННЫЕ КОМПОНЕНТЫ ===
-        neural_network_prediction = 0,
+        -- === V5 РЕВОЛЮЦИОННЫЕ КОМПОНЕНТЫ ===
+        enhanced_neural_network_prediction = 0,
         machine_learning_adjustment = 0,
         deep_learning_confidence = 0,
         quantum_entanglement_fix = 0,
@@ -1646,13 +1646,67 @@ local function riptide_correction(animlayers, velocity, player_state, quantum_st
         behavior_prediction_model = 0,
         adversarial_network_resistance = 0,
         contextual_awareness_factor = 0,
-        temporal_consistency_score = 0.75
+        temporal_consistency_score = 0.75,
+        
+        -- === V5 НОВЫЕ КОМПОНЕНТЫ ===
+        weapon_specific_analysis = 0,
+        map_aware_freestand = 0,
+        enhanced_neural_confidence = 0,
+        adaptive_dropout = 0,
+        temporal_prediction = 0,
+        velocity_prediction = 0,
+        animation_prediction = 0
     }
     
     local current_time = globals.curtime()
     local tick_interval = globals.tickinterval()
     
-    -- === ENHANCED LAG COMPENSATION ANALYSIS V2 ===
+    -- === WEAPON-SPECIFIC ANALYSIS V5 ===
+    local function weapon_specific_analysis()
+        local weapon = entity_get_player_weapon(entity_get_local_player())
+        local weapon_name = weapon and entity_get_classname(weapon):lower() or 'unknown'
+        local weapon_factor = 0
+        
+        -- Sniper rifles: more conservative, less aggressive
+        if weapon_name:find('awp') or weapon_name:find('ssg') or weapon_name:find('scar') or weapon_name:find('g3') then
+            weapon_factor = -0.15  -- Reduce desync for precision shots
+        -- SMGs: more aggressive, higher desync
+        elseif weapon_name:find('mp') or weapon_name:find('bizon') or weapon_name:find('p90') or weapon_name:find('ump') then
+            weapon_factor = 0.25
+        -- Rifles: balanced
+        elseif weapon_name:find('ak') or weapon_name:find('m4') or weapon_name:find('galil') or weapon_name:find('famas') then
+            weapon_factor = 0.1
+        -- Pistols: very aggressive
+        elseif weapon_name:find('deagle') or weapon_name:find('usp') or weapon_name:find('glock') or weapon_name:find('p250') then
+            weapon_factor = 0.35
+        end
+        
+        correction_result.weapon_specific_analysis = weapon_factor * 15
+        return correction_result.weapon_specific_analysis
+    end
+    
+    -- === MAP-AWARE FREESTAND V5 ===
+    local function map_aware_freestand()
+        local map = (globals.mapname and globals.mapname()) or (client.get_mapname and client.get_mapname()) or 'default'
+        map = tostring(map):lower()
+        local map_factor = 0
+        
+        -- Maps with tight angles and corners
+        if map:find('inferno') or map:find('nuke') then
+            map_factor = 0.2  -- More aggressive freestand
+        -- Maps with wide open spaces
+        elseif map:find('dust2') or map:find('mirage') then
+            map_factor = -0.1  -- Less aggressive
+        -- Maps with complex geometry
+        elseif map:find('overpass') or map:find('train') then
+            map_factor = 0.15
+        end
+        
+        correction_result.map_aware_freestand = map_factor * 12
+        return correction_result.map_aware_freestand
+    end
+    
+    -- === ENHANCED LAG COMPENSATION ANALYSIS V3 ===
     local function enhanced_lag_compensation()
         -- Get real-time network information
         local network_info = network_channel_system:get_network_info()
@@ -1911,13 +1965,14 @@ local function riptide_correction(animlayers, velocity, player_state, quantum_st
         return enhancement_factor
     end
     
-    -- === NEURAL NETWORK PREDICTION ===
-    local function neural_network_prediction()
-        -- Input normalization (+ weapon/map context) and dropout
+    -- === ENHANCED NEURAL NETWORK PREDICTION V5 ===
+    local function enhanced_neural_network_prediction()
+        -- Input normalization (+ weapon/map context) and enhanced dropout
         local weapon = entity_get_player_weapon(entity_get_local_player())
         local weapon_name = weapon and entity_get_classname(weapon):lower() or 'unknown'
         local map = (globals.mapname and globals.mapname()) or (client.get_mapname and client.get_mapname()) or 'default'
         map = tostring(map):lower()
+        
         local inputs = {
             velocity_magnitude = math_min(1.0, vector_length(velocity) / 300),
             current_time_normalized = (current_time % 8) / 8,
@@ -1925,42 +1980,72 @@ local function riptide_correction(animlayers, velocity, player_state, quantum_st
             player_on_ground = player_state.on_ground and 1 or 0,
             quantum_factor = clamp_safe(quantum_state.wave_function_collapse or 0.5, 0, 1),
             weapon_sniper = (weapon_name:find('awp') or weapon_name:find('ssg') or weapon_name:find('scar') or weapon_name:find('g3')) and 1 or 0,
-            map_compact = (map:find('inferno') or map:find('nuke')) and 1 or 0
+            map_compact = (map:find('inferno') or map:find('nuke')) and 1 or 0,
+            -- V5 new inputs
+            velocity_prediction = math_sin(current_time * 2.1) * 0.5 + 0.5,
+            animation_prediction = math_cos(current_time * 1.7) * 0.5 + 0.5,
+            temporal_prediction = (current_time % 4) / 4
         }
-        local dropout_mask = {1, 1, 1, 1, 1, (math.random() > 0.15) and 1 or 0, (math.random() > 0.15) and 1 or 0}
         
-        -- Simple neural network simulation
+        -- Enhanced dropout with temporal awareness
+        local dropout_mask = {}
+        for i = 1, #inputs do
+            local dropout_rate = 0.15
+            if i > 6 then dropout_rate = 0.25 end  -- Higher dropout for new features
+            dropout_mask[i] = (math.random() > dropout_rate) and 1 or 0
+        end
+        
+        -- Enhanced neural network with more layers
         local hidden_layer_1 = {}
-        local weights_1 = {0.7, -0.3, 0.9, 0.2, 0.5, -0.2, 0.3}
+        local hidden_layer_2 = {}
+        local weights_1 = {0.7, -0.3, 0.9, 0.2, 0.5, -0.2, 0.3, 0.4, 0.6, 0.8}
+        local weights_2 = {0.5, -0.7, 0.3, 0.9, -0.4}
         local bias_1 = 0.05
+        local bias_2 = 0.03
         
-        for i = 1, 3 do
+        -- First hidden layer
+        for i = 1, 4 do
             local sum = bias_1
-            local input_names = {"velocity_magnitude", "current_time_normalized", "player_ducking", "player_on_ground", "quantum_factor", "weapon_sniper", "map_compact"}
-            local input_idx = 1
-            for j, input_val in pairs(inputs) do
-                for k, name in ipairs(input_names) do
-                    if name == j then
-                        input_idx = k
-                        break
-                    end
-                end
-                local weight_idx = ((i - 1) * #input_names + input_idx) % #weights_1 + 1
-                local masked_val = input_val * (dropout_mask[input_idx] or 1)
+            for j = 1, #inputs do
+                local weight_idx = ((i - 1) * #inputs + j) % #weights_1 + 1
+                local masked_val = inputs[j] * (dropout_mask[j] or 1)
                 sum = sum + masked_val * weights_1[weight_idx]
-                input_idx = input_idx + 1
             end
             hidden_layer_1[i] = math.tanh(sum)
         end
         
+        -- Second hidden layer
+        for i = 1, 3 do
+            local sum = bias_2
+            for j = 1, #hidden_layer_1 do
+                local weight_idx = ((i - 1) * #hidden_layer_1 + j) % #weights_2 + 1
+                sum = sum + hidden_layer_1[j] * weights_2[weight_idx]
+            end
+            hidden_layer_2[i] = math_min(1.0, math_max(-1.0, math.tanh(sum)))
+        end
+        
+        -- Output layer
         local output_weights = {0.6, -0.8, 0.4}
         local output = 0
-        for i = 1, 3 do
-            output = output + hidden_layer_1[i] * output_weights[i]
+        for i = 1, #hidden_layer_2 do
+            output = output + hidden_layer_2[i] * output_weights[i]
         end
-        -- scale to 58 cap with conservative factor, reduce overfit influence
-        correction_result.neural_network_prediction = clamp_safe(math.tanh(output) * 20, -20, 20)
-        return correction_result.neural_network_prediction
+        
+        -- Enhanced scaling and confidence
+        local neural_output = clamp_safe(math.tanh(output) * 25, -25, 25)
+        correction_result.enhanced_neural_network_prediction = neural_output
+        
+        -- Calculate enhanced confidence
+        local input_quality = 0
+        for i = 1, #inputs do
+            input_quality = input_quality + (inputs[i] * (dropout_mask[i] or 1))
+        end
+        input_quality = input_quality / #inputs
+        
+        correction_result.enhanced_neural_confidence = math.min(1.0, input_quality * 0.8 + 0.2)
+        correction_result.adaptive_dropout = 1.0 - (input_quality * 0.3)
+        
+        return neural_output
     end
     
     -- === MACHINE LEARNING ADJUSTMENT ===
@@ -2059,7 +2144,9 @@ local function riptide_correction(animlayers, velocity, player_state, quantum_st
         return correction_result.predictive_analytics_boost
     end
     
-    -- === ПРИМЕНЕНИЕ ВСЕХ УЛУЧШЕНИЙ V3 ===
+    -- === ПРИМЕНЕНИЕ ВСЕХ УЛУЧШЕНИЙ V5 ===
+    local weapon_analysis = weapon_specific_analysis()
+    local map_freestand = map_aware_freestand()
     local lag_comp_fix = enhanced_lag_compensation()
     local anim_layer_fix = enhanced_animation_analysis()
     local velocity_correlation = velocity_desync_correlation()
@@ -2072,7 +2159,9 @@ local function riptide_correction(animlayers, velocity, player_state, quantum_st
         ml_intensity = 0.75 + (vector_length(velocity) / 320 * 0.2),
         quantum_power = 0.90 + ((quantum_state and quantum_state.uncertainty_principle or 0.8) - 0.8) * 0.5,
         ai_precision = 0.80 + (player_state.on_ground and 0.1 or -0.05),
-        analytics_boost = 0.70 + (current_time % 1.0) * 0.2
+        analytics_boost = 0.70 + (current_time % 1.0) * 0.2,
+        weapon_adaptation = 0.85 + (math.abs(weapon_analysis) / 100 * 0.15),
+        map_adaptation = 0.80 + (math.abs(map_freestand) / 100 * 0.2)
     }
     
     -- Limit values to 0.1-1.0 range
@@ -2080,14 +2169,14 @@ local function riptide_correction(animlayers, velocity, player_state, quantum_st
         adaptive_settings[key] = math_max(0.1, math_min(1.0, value))
     end
     
-    -- Apply V3 components with automatic settings
-    local neural_prediction = neural_network_prediction() * adaptive_settings.neural_strength
+    -- Apply V5 components with automatic settings
+    local neural_prediction = enhanced_neural_network_prediction() * adaptive_settings.neural_strength
     local ml_adjustment = machine_learning_adjustment() * adaptive_settings.ml_intensity
     local quantum_fix = quantum_entanglement_fix() * adaptive_settings.quantum_power
     local ai_pattern = ai_pattern_recognition() * adaptive_settings.ai_precision
     local analytics_boost = predictive_analytics_boost() * adaptive_settings.analytics_boost
     
-    -- === ULTRA IMPROVED V3 DESYNC CORRECTION ===
+    -- === ULTRA IMPROVED V5 DESYNC CORRECTION ===
     correction_result.corrected_desync = 
         (anim_layer_fix * 0.25) +
         (lag_comp_fix * 20) +
@@ -2098,45 +2187,52 @@ local function riptide_correction(animlayers, velocity, player_state, quantum_st
         (ml_adjustment * 0.35) +
         (quantum_fix * 0.3) +
         (ai_pattern * 0.25) +
-        (analytics_boost * 0.3)
+        (analytics_boost * 0.3) +
+        (weapon_analysis * 0.4) +
+        (map_freestand * 0.35)
     
-    -- === ULTRA IMPROVED V3 RIPTIDE FACTOR CALCULATION ===
+    -- === ULTRA IMPROVED V5 RIPTIDE FACTOR CALCULATION ===
     correction_result.riptide_factor = math_min(1.0,
         (math_abs(lag_comp_fix) + math_abs(anim_layer_fix) + math_abs(velocity_correlation) +
-         math_abs(neural_prediction) * 0.8 + math_abs(ml_adjustment) * 0.7 + math_abs(quantum_fix) * 0.6) / 58
+         math_abs(neural_prediction) * 0.8 + math_abs(ml_adjustment) * 0.7 + math_abs(quantum_fix) * 0.6 +
+         math_abs(weapon_analysis) * 0.9 + math_abs(map_freestand) * 0.8) / 58
     )
     
-    -- === REVOLUTIONARY V3 CONFIDENCE SYSTEM ===
+    -- === REVOLUTIONARY V5 CONFIDENCE SYSTEM ===
     local base_confidence = 0.80
     local movement_confidence = player_state.moving and 0.15 or 0.1
     local animation_confidence = correction_result.confidence * 0.12
     local temporal_confidence = temporal_stability * 0.08
     
-    -- V3 confidence components
+    -- V5 confidence components
     local neural_confidence = math_min(0.15, math_abs(neural_prediction) / 100)
     local ml_confidence = math_min(0.12, math_abs(ml_adjustment) / 80)
     local quantum_confidence = math_min(0.18, math_abs(quantum_fix) / 120)
     local ai_confidence = math_min(0.10, math_abs(ai_pattern) / 60)
     local analytics_confidence = math_min(0.13, math_abs(analytics_boost) / 90)
+    local weapon_confidence = math_min(0.12, math_abs(weapon_analysis) / 80)
+    local map_confidence = math_min(0.10, math_abs(map_freestand) / 70)
     
     correction_result.confidence = math_min(1.0,
         base_confidence + movement_confidence + animation_confidence + temporal_confidence +
-        neural_confidence + ml_confidence + quantum_confidence + ai_confidence + analytics_confidence
+        neural_confidence + ml_confidence + quantum_confidence + ai_confidence + analytics_confidence +
+        weapon_confidence + map_confidence
     )
     
-    -- Update V3 fields
+    -- Update V5 fields
     correction_result.deep_learning_confidence = neural_confidence + ml_confidence
     correction_result.neural_adaptation_factor = (neural_confidence + ai_confidence) * 0.5
     correction_result.dynamic_weight_optimization = (ml_confidence + analytics_confidence) * 0.6
     correction_result.temporal_consistency_score = temporal_confidence + (quantum_confidence * 0.5)
     
-    -- === SPECIAL V3 CORRECTIONS ===
+    -- === SPECIAL V5 CORRECTIONS ===
     -- Crouch peek correction
     if player_state.ducking and player_state.moving then
         local crouch_peek_fix = (player_state.duck_amount or 0.5) * 
                                math_cos(current_time * 7.2) * 22
         local neural_crouch_boost = neural_prediction * 0.15
-        correction_result.corrected_desync = correction_result.corrected_desync + crouch_peek_fix + neural_crouch_boost
+        local weapon_crouch_boost = weapon_analysis * 0.1
+        correction_result.corrected_desync = correction_result.corrected_desync + crouch_peek_fix + neural_crouch_boost + weapon_crouch_boost
     end
     
     -- Air correction
@@ -2144,10 +2240,11 @@ local function riptide_correction(animlayers, velocity, player_state, quantum_st
         local air_fix = math_sin(current_time * 4.8) * 10
         local quantum_air_boost = quantum_fix * 0.12
         local ml_air_prediction = ml_adjustment * 0.08
-        correction_result.corrected_desync = correction_result.corrected_desync + air_fix + quantum_air_boost + ml_air_prediction
+        local map_air_boost = map_freestand * 0.05
+        correction_result.corrected_desync = correction_result.corrected_desync + air_fix + quantum_air_boost + ml_air_prediction + map_air_boost
     end
     
-    -- === DYNAMIC LIMITS V3 ===
+    -- === DYNAMIC LIMITS V5 ===
     -- Force positive desync value
     correction_result.corrected_desync = math_abs(correction_result.corrected_desync)
     
@@ -2155,7 +2252,7 @@ local function riptide_correction(animlayers, velocity, player_state, quantum_st
     local dynamic_limit = 58 + (correction_result.confidence * 20)
     correction_result.corrected_desync = math_min(dynamic_limit, correction_result.corrected_desync)
     
-    -- === META-CORRECTION V3 ===
+    -- === META-CORRECTION V5 ===
     -- Safe calculation
     local layer_weight_safe = safe_number(correction_result.layer_weight_correction, 0)
     local velocity_correlation_safe = safe_number(correction_result.velocity_desync_correlation, 0)
@@ -2163,6 +2260,8 @@ local function riptide_correction(animlayers, velocity, player_state, quantum_st
     local neural_pred_safe = safe_number(neural_prediction, 0)
     local quantum_fix_safe = safe_number(quantum_fix, 0)
     local analytics_boost_safe = safe_number(analytics_boost, 0)
+    local weapon_analysis_safe = safe_number(weapon_analysis, 0)
+    local map_freestand_safe = safe_number(map_freestand, 0)
     
     correction_result.advanced_correction = 
         (layer_weight_safe * 0.35) +
@@ -2170,17 +2269,21 @@ local function riptide_correction(animlayers, velocity, player_state, quantum_st
         (adaptive_comp_safe * 18) +
         (neural_pred_safe * 0.2) +
         (quantum_fix_safe * 0.15) +
-        (analytics_boost_safe * 0.18)
+        (analytics_boost_safe * 0.18) +
+        (weapon_analysis_safe * 0.12) +
+        (map_freestand_safe * 0.10)
     
     -- Force safe values
     correction_result.advanced_correction = safe_number(correction_result.advanced_correction, 0)
     correction_result.advanced_correction = clamp_safe(correction_result.advanced_correction, -180, 180)
     
-    -- === META-LEARNING AND EVOLUTION ===
+    -- === META-LEARNING AND EVOLUTION V5 ===
     correction_result.meta_learning_enhancement = 
         (correction_result.deep_learning_confidence * 25) +
         (correction_result.neural_adaptation_factor * 30) +
-        (correction_result.dynamic_weight_optimization * 20)
+        (correction_result.dynamic_weight_optimization * 20) +
+        (correction_result.weapon_specific_analysis or 0) * 0.8 +
+        (correction_result.map_aware_freestand or 0) * 0.6
     
     correction_result.algorithmic_evolution_score = 
         correction_result.confidence * correction_result.riptide_factor * 
@@ -2424,7 +2527,7 @@ end
 -- === DEBUG SYSTEM STATUS ===
 local function debug_system_status()
     debug_log("[SYSTEM-CHECK] ===== RESOLVER SYSTEM STATUS =====")
-    debug_log("[SYSTEM-CHECK] UI Elements: riptide_v3_debug initialized correctly")
+            debug_log("[SYSTEM-CHECK] UI Elements: riptide_v5_debug initialized correctly")
     debug_log("[SYSTEM-CHECK] Markov Chain: Safe initialization implemented")
     debug_log("[SYSTEM-CHECK] Neural Networks: Ready for learning")
     debug_log("[SYSTEM-CHECK] 4D Mathematics: Tensor operations active")
@@ -2606,7 +2709,7 @@ local function analyze_movement_layers(layers, velocity_data, player_state)
         uncertainty_principle = math_random() * 0.2 + 0.8
     }
     
-    -- Применяем новую улучшенную систему коррекции Riptide V4 с wide jitter detection
+    -- Применяем новую улучшенную систему коррекции Riptide V5 с wide jitter detection
     -- Создаем фейковые network_data для совместимости
     local network_data = {}
     for i = 1, 5 do
@@ -2626,7 +2729,7 @@ local function analyze_movement_layers(layers, velocity_data, player_state)
             signed_desync = signed_desync + riptide_adjustment * 0.45
         end
         
-        -- Дополнительные коррекции от системы Riptide V2
+        -- Дополнительные коррекции от системы Riptide V5
         if riptide_result.lag_compensation_fix and math_abs(riptide_result.lag_compensation_fix) > 0.001 then
             signed_desync = signed_desync + riptide_result.lag_compensation_fix * 18 -- Конвертация в градусы
         end
@@ -2635,7 +2738,7 @@ local function analyze_movement_layers(layers, velocity_data, player_state)
             signed_desync = signed_desync + riptide_result.animation_layer_fix * 0.65
         end
         
-        -- Новые коррекции V2
+        -- Новые коррекции V5
         if riptide_result.advanced_correction and math_abs(riptide_result.advanced_correction) > 0.5 then
             signed_desync = signed_desync + riptide_result.advanced_correction * 0.3
         end
@@ -2644,26 +2747,30 @@ local function analyze_movement_layers(layers, velocity_data, player_state)
             signed_desync = signed_desync + riptide_result.prediction_enhancement * 0.4
         end
         
-        -- === ЛОГИРОВАНИЕ РЕВОЛЮЦИОННОЙ RIPTIDE V3 СИСТЕМЫ ===
-        if riptide_result.riptide_factor > 0.20 then -- Снижен порог для V3
+        -- === ЛОГИРОВАНИЕ РЕВОЛЮЦИОННОЙ RIPTIDE V5 СИСТЕМЫ ===
+        if riptide_result.riptide_factor > 0.20 then -- Снижен порог для V5
             debug_log(string.format(
-                "[RIPTIDE-V3-REVOLUTION] 🚀 F: %.2f | Orig: %.1f° | Adj: %.1f° | Final: %.1f° | Conf: %.2f | Neural: %.1f | ML: %.1f | Quantum: %.1f | AI: %.1f | Analytics: %.1f | Meta: %.1f | Evolution: %.2f",
+                "[RIPTIDE-V5-REVOLUTION] 🚀 F: %.2f | Orig: %.1f° | Adj: %.1f° | Final: %.1f° | Conf: %.2f | Enhanced Neural: %.1f | ML: %.1f | Quantum: %.1f | AI: %.1f | Analytics: %.1f | Weapon: %.1f | Map: %.1f | Neural Conf: %.2f | Dropout: %.2f | Meta: %.1f | Evolution: %.2f",
                 riptide_result.riptide_factor,
                 math.abs(smoothed_desync),
                 riptide_adjustment,
                 signed_desync,
                 riptide_result.confidence or 0,
-                riptide_result.neural_network_prediction or 0,
+                riptide_result.enhanced_neural_network_prediction or 0,
                 riptide_result.machine_learning_adjustment or 0,
                 riptide_result.quantum_entanglement_fix or 0,
                 riptide_result.ai_pattern_recognition or 0,
                 riptide_result.predictive_analytics_boost or 0,
+                riptide_result.weapon_specific_analysis or 0,
+                riptide_result.map_aware_freestand or 0,
+                riptide_result.enhanced_neural_confidence or 0,
+                riptide_result.adaptive_dropout or 0,
                 riptide_result.meta_learning_enhancement or 0,
                 riptide_result.algorithmic_evolution_score or 0
             ))
         end
         
-        -- Применяем новые riptide-специфичные фиксы V2
+        -- Применяем новые riptide-специфичные фиксы V5
         if riptide_result.velocity_desync_correlation and math_abs(riptide_result.velocity_desync_correlation) > 0.5 then
             local velocity_correlation_correction = riptide_result.velocity_desync_correlation * 0.35
             signed_desync = signed_desync + velocity_correlation_correction
@@ -2696,7 +2803,7 @@ local function analyze_movement_layers(layers, velocity_data, player_state)
         -- Коррекция для приседания с учетом Riptide изменений
         if player_state.ducking then
             local riptide_crouch_modifier = 0.7
-            -- После Riptide crouch peek стал менее предсказуемым
+            -- После Riptide V5 crouch peek стал менее предсказуемым
             if riptide_result and riptide_result.riptide_factor > 0.5 then
                 riptide_crouch_modifier = 0.6 + math_sin(globals_curtime() * 8.3) * 0.15
             end
@@ -2706,15 +2813,15 @@ local function analyze_movement_layers(layers, velocity_data, player_state)
         -- Коррекция для воздуха с учетом Riptide изменений
         if not player_state.on_ground then
             local riptide_air_modifier = 0.4
-            -- После Riptide air movement prediction стал менее точным
+            -- После Riptide V5 air movement prediction стал менее точным
             if riptide_result and riptide_result.network_prediction_delta and riptide_result.network_prediction_delta > 0.02 then
-                riptide_air_modifier = 0.3 + math_cos(globals_curtime() * 5.7) * 0.1
+                riptide_air_modifier = 0.3 + math_cos(globals_curtime() * 0.5) * 0.1
             end
             signed_desync = signed_desync * riptide_air_modifier
         end
     end
 
-    -- Финальное ограничение с учетом Riptide факторов
+    -- Финальное ограничение с учетом Riptide V5 факторов
     local max_desync_final = 58
     -- Убираем повышение лимита выше 58: актуальный максимум 58 с учётом обновлений
     signed_desync = math_max(-max_desync_final, math_min(max_desync_final, signed_desync))
@@ -4343,8 +4450,8 @@ local function analyze_backtrack_records(entity_index)
                                 uncertainty_principle = 0.9
                             }
                             
-                            -- === RIPTIDE V3 REVOLUTION BACKTRACK INTEGRATION ===
-                            local bt_quantum_state_v3 = {
+                            -- === RIPTIDE V5 REVOLUTION BACKTRACK INTEGRATION ===
+                            local bt_quantum_state_v5 = {
                                 wave_function_collapse = math_sin(globals_curtime() * 2.7) * 0.5 + 0.5,
                                 entanglement_factor = math_cos(globals_curtime() * 1.9) * 0.3 + 0.7,
                                 uncertainty_principle = math_random() * 0.2 + 0.8
@@ -4358,35 +4465,42 @@ local function analyze_backtrack_records(entity_index)
                 timestamp = record.simulation_time or globals_curtime()
             })
         end
-        local bt_riptide_result = riptide_correction(record.animlayers, record.velocity, bt_player_state, bt_quantum_state_v3, bt_network_data, entity_index)
+        local bt_riptide_result = riptide_correction(record.animlayers, record.velocity, bt_player_state, bt_quantum_state_v5, bt_network_data, entity_index)
                             
                             if bt_riptide_result then
-                                best_record.riptide_v3_data = {
+                                best_record.riptide_v5_data = {
                                     riptide_factor = bt_riptide_result.riptide_factor,
                                     temporal_stability = bt_riptide_result.temporal_stability,
                                     velocity_correlation = bt_riptide_result.velocity_desync_correlation,
                                     advanced_correction = bt_riptide_result.advanced_correction,
-                                    -- V3 революционная компонента
-                                    neural_network_prediction = bt_riptide_result.neural_network_prediction or 0,
+                                    -- V5 революционная компонента
+                                    enhanced_neural_network_prediction = bt_riptide_result.enhanced_neural_network_prediction or 0,
                                     machine_learning_adjustment = bt_riptide_result.machine_learning_adjustment or 0,
                                     quantum_entanglement_fix = bt_riptide_result.quantum_entanglement_fix or 0,
                                     ai_pattern_recognition = bt_riptide_result.ai_pattern_recognition or 0,
                                     predictive_analytics_boost = bt_riptide_result.predictive_analytics_boost or 0,
+                                    weapon_specific_analysis = bt_riptide_result.weapon_specific_analysis or 0,
+                                    map_aware_freestand = bt_riptide_result.map_aware_freestand or 0,
+                                    enhanced_neural_confidence = bt_riptide_result.enhanced_neural_confidence or 0,
+                                    adaptive_dropout = bt_riptide_result.adaptive_dropout or 0,
+                                    temporal_prediction = bt_riptide_result.temporal_prediction or 0,
+                                    velocity_prediction = bt_riptide_result.velocity_prediction or 0,
+                                    animation_prediction = bt_riptide_result.animation_prediction or 0,
                                     meta_learning_enhancement = bt_riptide_result.meta_learning_enhancement or 0,
                                     algorithmic_evolution_score = bt_riptide_result.algorithmic_evolution_score or 0,
                                     confidence = bt_riptide_result.confidence
                                 }
                                 
-                                -- === УЛЬТРА УЛУЧШЕННЫЙ V3 BONUS CALCULATION ===
+                                -- === УЛЬТРА УЛУЧШЕННЫЙ V5 BONUS CALCULATION ===
                                 local riptide_bonus = 0
                                 
                                 -- Базовые компоненты
                                 riptide_bonus = riptide_bonus + (bt_riptide_result.riptide_factor * 500)
                                 riptide_bonus = riptide_bonus + (bt_riptide_result.temporal_stability * 300)
                                 
-                                -- V3 компоненты
-                                if bt_riptide_result.neural_network_prediction then
-                                    riptide_bonus = riptide_bonus + (math_abs(bt_riptide_result.neural_network_prediction) * 0.8)
+                                -- V5 компоненты
+                                if bt_riptide_result.enhanced_neural_network_prediction then
+                                    riptide_bonus = riptide_bonus + (math_abs(bt_riptide_result.enhanced_neural_network_prediction) * 0.9)
                                 end
                                 
                                 if bt_riptide_result.machine_learning_adjustment then
@@ -4403,6 +4517,23 @@ local function analyze_backtrack_records(entity_index)
                                 
                                 if bt_riptide_result.predictive_analytics_boost then
                                     riptide_bonus = riptide_bonus + (math_abs(bt_riptide_result.predictive_analytics_boost) * 0.6)
+                                end
+                                
+                                -- V5 новые компоненты
+                                if bt_riptide_result.weapon_specific_analysis then
+                                    riptide_bonus = riptide_bonus + (math_abs(bt_riptide_result.weapon_specific_analysis) * 0.8)
+                                end
+                                
+                                if bt_riptide_result.map_aware_freestand then
+                                    riptide_bonus = riptide_bonus + (math_abs(bt_riptide_result.map_aware_freestand) * 0.7)
+                                end
+                                
+                                if bt_riptide_result.enhanced_neural_confidence then
+                                    riptide_bonus = riptide_bonus + (bt_riptide_result.enhanced_neural_confidence * 200)
+                                end
+                                
+                                if bt_riptide_result.adaptive_dropout then
+                                    riptide_bonus = riptide_bonus + (bt_riptide_result.adaptive_dropout * 150)
                                 end
                                 
                                 if bt_riptide_result.meta_learning_enhancement then
@@ -4441,27 +4572,31 @@ local function analyze_backtrack_records(entity_index)
         end
     end
 
-    -- === ENHANCED V3 BACKTRACK LOGGING ===
-    -- Ультра улучшенное логирование для backtrack V3
-    if best_record and riptide_v3_debug and ui.get(riptide_v3_debug) then
+    -- === ENHANCED V5 BACKTRACK LOGGING ===
+    -- Ультра улучшенное логирование для backtrack V5
+    if best_record and riptide_v5_debug and ui.get(riptide_v5_debug) then
         local v2_features = best_record.v2_features or {}
-        local riptide_data = best_record.riptide_v3_data or {}
+        local riptide_data = best_record.riptide_v5_data or {}
         local direction_data = best_record.direction_v2_data or {}
         
         if riptide_data.riptide_factor and riptide_data.riptide_factor > 0.3 then
             debug_log(string.format(
-                "[BACKTRACK-V3-ANALYSIS] Entity: %d | Score: %.0f | 4D: %.0f | ML: %.0f | Weapon: %s | RF: %.2f | Neural: %.1f | ML: %.1f | Quantum: %.1f | AI: %.1f | Analytics: %.1f | Meta: %.1f | Evolution: %.2f",
+                "[BACKTRACK-V5-ANALYSIS] Entity: %d | Score: %.0f | 4D: %.0f | ML: %.0f | Weapon: %s | RF: %.2f | Enhanced Neural: %.1f | ML: %.1f | Quantum: %.1f | AI: %.1f | Analytics: %.1f | Weapon: %.1f | Map: %.1f | Neural Conf: %.2f | Dropout: %.2f | Meta: %.1f | Evolution: %.2f",
                 entity_index,
                 best_record.enhanced_score,
                 best_record.record_4d_score or 0,
                 best_record.ml_score or 0,
                 best_record.weapon_used or "unknown",
                 riptide_data.riptide_factor or 0,
-                riptide_data.neural_network_prediction or 0,
+                riptide_data.enhanced_neural_network_prediction or 0,
                 riptide_data.machine_learning_adjustment or 0,
                 riptide_data.quantum_entanglement_fix or 0,
                 riptide_data.ai_pattern_recognition or 0,
                 riptide_data.predictive_analytics_boost or 0,
+                riptide_data.weapon_specific_analysis or 0,
+                riptide_data.map_aware_freestand or 0,
+                riptide_data.enhanced_neural_confidence or 0,
+                riptide_data.adaptive_dropout or 0,
                 riptide_data.meta_learning_enhancement or 0,
                 riptide_data.algorithmic_evolution_score or 0
             ))
@@ -5251,16 +5386,16 @@ local function process_backtrack(entity_index)
         local player_name = entity_get_player_name(entity_index)
         local time_diff = globals_curtime() - best_record.simulation_time
         
-        -- === V3 ENHANCED VALIDATION ===
-        -- Ультра продвинутая валидация с новыми системами V3
+        -- === V5 ENHANCED VALIDATION ===
+        -- Ультра продвинутая валидация с новыми системами V5
         local validation_passed = true
         
-        -- Проверяем Riptide V3 совместимость
-        if best_record.riptide_v3_data then
-            local riptide_factor = best_record.riptide_v3_data.riptide_factor
-            local temporal_stability = best_record.riptide_v3_data.temporal_stability
-            local neural_prediction = best_record.riptide_v3_data.neural_network_prediction or 0
-            local quantum_fix = best_record.riptide_v3_data.quantum_entanglement_fix or 0
+        -- Проверяем Riptide V5 совместимость
+        if best_record.riptide_v5_data then
+            local riptide_factor = best_record.riptide_v5_data.riptide_factor
+            local temporal_stability = best_record.riptide_v5_data.temporal_stability
+            local neural_prediction = best_record.riptide_v5_data.enhanced_neural_network_prediction or 0
+            local quantum_fix = best_record.riptide_v5_data.quantum_entanglement_fix or 0
             
             -- Если Riptide фактор слишком высок и стабильность низкая, это может быть ненадежно
             if riptide_factor > 0.8 and temporal_stability < 0.3 then
@@ -5271,11 +5406,11 @@ local function process_backtrack(entity_index)
                 ))
             end
             
-            -- V3 дополнительные проверки
+            -- V5 дополнительные проверки
             -- Если нейросетевое предсказание слишком экстремальное
             if math_abs(neural_prediction) > 50 then
                 debug_log(string.format(
-                    "[BACKTRACK-V3-WARN] %s | Extreme neural prediction: %.1f",
+                    "[BACKTRACK-V5-WARN] %s | Extreme neural prediction: %.1f",
                     player_name, neural_prediction
                 ))
             end
@@ -5283,7 +5418,7 @@ local function process_backtrack(entity_index)
             -- Если квантовая коррекция слишком высока
             if math_abs(quantum_fix) > 30 then
                 debug_log(string.format(
-                    "[BACKTRACK-V3-WARN] %s | High quantum correction: %.1f",
+                    "[BACKTRACK-V5-WARN] %s | High quantum correction: %.1f",
                     player_name, quantum_fix
                 ))
             end
@@ -5307,26 +5442,28 @@ local function process_backtrack(entity_index)
         if player_data[entity_index] then
             local data = player_data[entity_index]
             
-            -- Инициализируем backtrack статистику V3 если нужно
-            if not data.backtrack_v3_stats then
-                data.backtrack_v3_stats = {
+            -- Инициализируем backtrack статистику V5 если нужно
+            if not data.backtrack_v5_stats then
+                data.backtrack_v5_stats = {
                     total_uses = 0,
                     successful_applications = 0,
                     average_riptide_factor = 0,
                     average_direction_confidence = 0,
                     preferred_methods = {},
                     last_use_time = 0,
-                    -- V3 статистика
-                    average_neural_prediction = 0,
+                    -- V5 статистика
+                    average_enhanced_neural_prediction = 0,
                     average_quantum_fix = 0,
                     average_ai_pattern = 0,
-                    v3_success_rate = 0.5,
+                    average_weapon_analysis = 0,
+                    average_map_freestand = 0,
+                    v5_success_rate = 0.5,
                     neural_accuracy = 0.5,
                     quantum_stability = 0.5
                 }
             end
             
-            local bt_stats = data.backtrack_v3_stats
+            local bt_stats = data.backtrack_v5_stats
             bt_stats.total_uses = bt_stats.total_uses + 1
             bt_stats.last_use_time = globals_curtime()
             
@@ -5334,24 +5471,35 @@ local function process_backtrack(entity_index)
                 bt_stats.successful_applications = bt_stats.successful_applications + 1
                 
                 -- Обновляем средние значения
-                if best_record.riptide_v3_data then
+                if best_record.riptide_v5_data then
                     bt_stats.average_riptide_factor = 
-                        (bt_stats.average_riptide_factor * 0.8) + (best_record.riptide_v3_data.riptide_factor * 0.2)
+                        (bt_stats.average_riptide_factor * 0.8) + (best_record.riptide_v5_data.riptide_factor * 0.2)
                     
-                    -- V3 статистика
-                    if best_record.riptide_v3_data.neural_network_prediction then
-                        bt_stats.average_neural_prediction = 
-                            (bt_stats.average_neural_prediction * 0.8) + (math_abs(best_record.riptide_v3_data.neural_network_prediction) * 0.2)
+                    -- V5 статистика
+                    if best_record.riptide_v5_data.enhanced_neural_network_prediction then
+                        bt_stats.average_enhanced_neural_prediction = 
+                            (bt_stats.average_enhanced_neural_prediction * 0.8) + (math_abs(best_record.riptide_v5_data.enhanced_neural_network_prediction) * 0.2)
                     end
                     
-                    if best_record.riptide_v3_data.quantum_entanglement_fix then
+                    if best_record.riptide_v5_data.quantum_entanglement_fix then
                         bt_stats.average_quantum_fix = 
-                            (bt_stats.average_quantum_fix * 0.8) + (math_abs(best_record.riptide_v3_data.quantum_entanglement_fix) * 0.2)
+                            (bt_stats.average_quantum_fix * 0.8) + (math_abs(best_record.riptide_v5_data.quantum_entanglement_fix) * 0.2)
                     end
                     
-                    if best_record.riptide_v3_data.ai_pattern_recognition then
+                    if best_record.riptide_v5_data.ai_pattern_recognition then
                         bt_stats.average_ai_pattern = 
-                            (bt_stats.average_ai_pattern * 0.8) + (math_abs(best_record.riptide_v3_data.ai_pattern_recognition) * 0.2)
+                            (bt_stats.average_ai_pattern * 0.8) + (math_abs(best_record.riptide_v5_data.ai_pattern_recognition) * 0.2)
+                    end
+                    
+                    -- V5 новые компоненты
+                    if best_record.riptide_v5_data.weapon_specific_analysis then
+                        bt_stats.average_weapon_analysis = 
+                            (bt_stats.average_weapon_analysis * 0.8) + (math_abs(best_record.riptide_v5_data.weapon_specific_analysis) * 0.2)
+                    end
+                    
+                    if best_record.riptide_v5_data.map_aware_freestand then
+                        bt_stats.average_map_freestand = 
+                            (bt_stats.average_map_freestand * 0.8) + (math_abs(best_record.riptide_v5_data.map_aware_freestand) * 0.2)
                     end
                 end
                 
@@ -5366,18 +5514,18 @@ local function process_backtrack(entity_index)
                     bt_stats.preferred_methods[method] = bt_stats.preferred_methods[method] + 1
                 end
                 
-                -- Обновляем V3 успешность
+                -- Обновляем V5 успешность
                 local success_rate = bt_stats.successful_applications / bt_stats.total_uses
-                bt_stats.v3_success_rate = (bt_stats.v3_success_rate * 0.9) + (success_rate * 0.1)
+                bt_stats.v5_success_rate = (bt_stats.v5_success_rate * 0.9) + (success_rate * 0.1)
             end
         end
         
-        -- === V3 ENHANCED LOGGING ===
+        -- === V5 ENHANCED LOGGING ===
         local v2_features = best_record.v2_features or {}
-        local riptide_data = best_record.riptide_v3_data or {}
+        local riptide_data = best_record.riptide_v5_data or {}
         local direction_data = best_record.direction_v2_data or {}
         
-        if riptide_v3_debug and ui.get(riptide_v3_debug) and riptide_data.riptide_factor and riptide_data.riptide_factor > 0.3 then
+        if riptide_v5_debug and ui.get(riptide_v5_debug) and riptide_data.riptide_factor and riptide_data.riptide_factor > 0.3 then
             debug_log(string.format(
                 "[BACKTRACK-APPLIED] %s | Time: %.3fs | Score: %.0f | Valid: %s",
                 player_name or "Unknown",
@@ -6075,7 +6223,7 @@ local function resolve_aisetpos(entity_index)
             velocity_data,
             player_state,
             quantum_state,
-            angle_history,
+            network_data,
             entity_index
         )
     end
@@ -6416,7 +6564,7 @@ local function resolve_aisetpos(entity_index)
     if #data.yaw_history > 16 then table.remove(data.yaw_history) end
     
     -- Debug logging
-    if riptide_v3_debug and ui.get(riptide_v3_debug) then
+    if riptide_v5_debug and ui.get(riptide_v5_debug) then
         debug_log(string.format(
             "[AISETPOS-V4] %s | Yaw: %.1f° | Desync: %.1f° | Quality: %.2f | Network: %.2f | Latency: %.1fms",
             player_name,
