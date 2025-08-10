@@ -6779,7 +6779,12 @@ local backtrack_performance = {
     successful_applications = 0,
     total_shots_with_bt = 0,
     hits_with_bt = 0,
-    last_reset = globals.curtime()
+    last_reset = globals.curtime(),
+    -- === HITBOX MATRIX PERFORMANCE TRACKING ===
+    matrix_analysis_count = 0,
+    matrix_high_confidence_hits = 0,
+    matrix_low_confidence_hits = 0,
+    matrix_confidence_correlation = 0.5
 }
 
 function get_backtrack_performance()
@@ -6814,15 +6819,15 @@ function get_backtrack_performance()
     end
     
     -- === HITBOX MATRIX PERFORMANCE CALCULATION ===
-    if backtrack_performance.matrix_analysis_count > 0 then
+    if backtrack_performance.matrix_analysis_count and backtrack_performance.matrix_analysis_count > 0 then
         local high_confidence_hit_rate = 0
         local low_confidence_hit_rate = 0
         
-        if backtrack_performance.matrix_high_confidence_hits > 0 then
+        if backtrack_performance.matrix_high_confidence_hits and backtrack_performance.matrix_high_confidence_hits > 0 then
             high_confidence_hit_rate = backtrack_performance.matrix_high_confidence_hits / backtrack_performance.matrix_analysis_count
         end
         
-        if backtrack_performance.matrix_low_confidence_hits > 0 then
+        if backtrack_performance.matrix_low_confidence_hits and backtrack_performance.matrix_low_confidence_hits > 0 then
             low_confidence_hit_rate = backtrack_performance.matrix_low_confidence_hits / backtrack_performance.matrix_analysis_count
         end
         
@@ -6830,20 +6835,24 @@ function get_backtrack_performance()
         matrix_performance = (high_confidence_hit_rate * 0.7) + (low_confidence_hit_rate * 0.3)
         
         -- Update matrix confidence correlation
-        backtrack_performance.matrix_confidence_correlation = 
-            backtrack_performance.matrix_confidence_correlation * 0.9 + 
-            matrix_performance * 0.1
+        if backtrack_performance.matrix_confidence_correlation then
+            backtrack_performance.matrix_confidence_correlation = 
+                backtrack_performance.matrix_confidence_correlation * 0.9 + 
+                matrix_performance * 0.1
+        else
+            backtrack_performance.matrix_confidence_correlation = matrix_performance
+        end
     end
     
     return {
         application_success_rate = success_rate,
         hit_rate = hit_rate,
-        total_applications = backtrack_performance.total_applications,
-        total_shots = backtrack_performance.total_shots_with_bt,
+        total_applications = backtrack_performance.total_applications or 0,
+        total_shots = backtrack_performance.total_shots_with_bt or 0,
         -- === HITBOX MATRIX PERFORMANCE METRICS ===
         matrix_performance = matrix_performance,
-        matrix_analysis_count = backtrack_performance.matrix_analysis_count,
-        matrix_confidence_correlation = backtrack_performance.matrix_confidence_correlation
+        matrix_analysis_count = backtrack_performance.matrix_analysis_count or 0,
+        matrix_confidence_correlation = backtrack_performance.matrix_confidence_correlation or 0.5
     }
 end
 
@@ -6852,8 +6861,8 @@ function auto_adjust_backtrack_settings()
     local performance = get_backtrack_performance()
     
     -- === HITBOX MATRIX PERFORMANCE ADJUSTMENT ===
-    if performance.matrix_analysis_count > 10 then
-        if performance.matrix_performance < 0.4 then
+    if performance.matrix_analysis_count and performance.matrix_analysis_count > 10 then
+        if performance.matrix_performance and performance.matrix_performance < 0.4 then
             -- Low matrix performance - adjust hitbox matrix settings
             if hitbox_matrix_resolving and hitbox_matrix_resolving.get() then
                 -- Reduce matrix quality for better performance
@@ -6865,7 +6874,7 @@ function auto_adjust_backtrack_settings()
                     end
                 end
             end
-        elseif performance.matrix_performance > 0.8 then
+        elseif performance.matrix_performance and performance.matrix_performance > 0.8 then
             -- High matrix performance - can increase quality
             if hitbox_matrix_resolving and hitbox_matrix_resolving.get() then
                 if hitbox_matrix_quality and hitbox_matrix_quality.get then
@@ -6880,7 +6889,7 @@ function auto_adjust_backtrack_settings()
     end
     
     -- If hit rate is too low, adjust strategy
-    if performance.total_shots > 20 and performance.hit_rate < 0.3 then
+    if performance.total_shots and performance.total_shots > 20 and performance.hit_rate and performance.hit_rate < 0.3 then
         -- Reduce backtrack aggressiveness globally
         for entity_index, player_data_entry in pairs(player_data) do
             if player_data_entry.backtrack_history then
@@ -6894,7 +6903,7 @@ function auto_adjust_backtrack_settings()
         end
         
         debug_log("[BT-AUTO] Low hit rate detected, adjusting settings")
-    elseif performance.total_shots > 10 and performance.hit_rate > 0.7 then
+    elseif performance.total_shots and performance.total_shots > 10 and performance.hit_rate and performance.hit_rate > 0.7 then
         -- High hit rate - can be more aggressive
         for entity_index, player_data_entry in pairs(player_data) do
             if player_data_entry.backtrack_history then
@@ -7007,11 +7016,25 @@ end
 function update_matrix_performance_metrics(matrix_confidence, was_successful)
     if not backtrack_performance then return end
     
+    -- Initialize fields if they don't exist
+    if not backtrack_performance.matrix_analysis_count then
+        backtrack_performance.matrix_analysis_count = 0
+    end
+    if not backtrack_performance.matrix_high_confidence_hits then
+        backtrack_performance.matrix_high_confidence_hits = 0
+    end
+    if not backtrack_performance.matrix_low_confidence_hits then
+        backtrack_performance.matrix_low_confidence_hits = 0
+    end
+    if not backtrack_performance.matrix_confidence_correlation then
+        backtrack_performance.matrix_confidence_correlation = 0.5
+    end
+    
     -- Update matrix analysis count
     backtrack_performance.matrix_analysis_count = backtrack_performance.matrix_analysis_count + 1
     
     -- Categorize by confidence level
-    if matrix_confidence > 0.7 then
+    if matrix_confidence and matrix_confidence > 0.7 then
         if was_successful then
             backtrack_performance.matrix_high_confidence_hits = backtrack_performance.matrix_high_confidence_hits + 1
         end
@@ -7023,9 +7046,11 @@ function update_matrix_performance_metrics(matrix_confidence, was_successful)
     
     -- Update confidence correlation
     local current_performance = was_successful and 1.0 or 0.0
-    backtrack_performance.matrix_confidence_correlation = 
-        backtrack_performance.matrix_confidence_correlation * 0.95 + 
-        (matrix_confidence * current_performance) * 0.05
+    if matrix_confidence then
+        backtrack_performance.matrix_confidence_correlation = 
+            backtrack_performance.matrix_confidence_correlation * 0.95 + 
+            (matrix_confidence * current_performance) * 0.05
+    end
 end
 
 -- === COMPREHENSIVE BACKTRACK ANALYSIS WITH HITBOX MATRIX ===
