@@ -151,8 +151,8 @@ local ui_get = ui.get
 
 -- UI Elements
 
-local riptide_v5_debug = ui.new_checkbox("rage", "other", "Debug Logs")
-local fake_lag_detection_enabled = ui.new_checkbox("rage", "other", "Fake Lag Detection")
+riptide_v5_debug = ui.new_checkbox("rage", "other", "Debug Logs")
+fake_lag_detection_enabled = ui.new_checkbox("rage", "other", "Fake Lag Detection")
 
 -- Core variables and references
 local client_camera_angles = client.camera_angles
@@ -331,7 +331,7 @@ end
 -- Player data storage
 local player_data = {}
 local resolver_data = {}
-local lag_records = {}
+lag_records = {}
 local debug_logs = {}
 local MAX_DEBUG_LOGS = 100
 
@@ -379,7 +379,7 @@ end
 
 -- === IMPROVED NETWORK CHANNEL SYSTEM ===
 -- Правильная система работы с сетевыми каналами для анализа пакетов
-local network_channel_system = (function()
+network_channel_system = (function()
     local this = {}
     
     local class_ptr = ffi.typeof('void***')
@@ -1598,7 +1598,7 @@ local function wide_jitter_detection(entity_index, angle_history)
     return jitter_result
 end
 -- === ULTRA ENHANCED RIPTIDE CORRECTION SYSTEM V5 ===
-local function riptide_correction(animlayers, velocity, player_state, quantum_state, network_data, entity_index)
+function riptide_correction(animlayers, velocity, player_state, quantum_state, network_data, entity_index)
     if not animlayers or not velocity or not player_state then
         return {
             corrected_desync = 0,
@@ -6169,7 +6169,7 @@ local function extract_neural_features(entity_index)
 end
 
 -- === ADVANCED FAKE LAG DETECTION AND COMPENSATION SYSTEM ===
-local function detect_fake_lag_manipulation(entity_index, records, network_info)
+function detect_fake_lag_manipulation(entity_index, records, network_info)
     if not records or #records < 5 then
         return {
             is_fake_lagging = false,
@@ -6317,7 +6317,7 @@ local function detect_fake_lag_manipulation(entity_index, records, network_info)
 end
 
 -- === ENHANCED FAKE LAG COMPENSATION ===
-local function apply_fake_lag_compensation(entity_index, fake_lag_data, base_desync, direction_data, network_info)
+function apply_fake_lag_compensation(entity_index, fake_lag_data, base_desync, direction_data, network_info)
     if not fake_lag_data or not fake_lag_data.is_fake_lagging then
         return base_desync, direction_data
     end
