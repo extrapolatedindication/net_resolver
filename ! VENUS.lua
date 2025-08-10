@@ -152,6 +152,7 @@ local ui_get = ui.get
 -- UI Elements
 
 local riptide_v5_debug = ui.new_checkbox("rage", "other", "Debug Logs")
+local fake_lag_detection_enabled = ui.new_checkbox("rage", "other", "Fake Lag Detection")
 
 -- Core variables and references
 local client_camera_angles = client.camera_angles
@@ -1655,11 +1656,33 @@ local function riptide_correction(animlayers, velocity, player_state, quantum_st
         adaptive_dropout = 0,
         temporal_prediction = 0,
         velocity_prediction = 0,
-        animation_prediction = 0
+        animation_prediction = 0,
+        
+        -- === FAKE LAG COMPENSATION ===
+        fake_lag_compensation = 0,
+        fake_lag_type = "none",
+        fake_lag_confidence = 0
     }
     
     local current_time = globals.curtime()
     local tick_interval = globals.tickinterval()
+    
+    -- === FAKE LAG DETECTION FOR RIPTIDE ===
+    local fake_lag_data = nil
+    if entity_index and fake_lag_detection_enabled and ui.get(fake_lag_detection_enabled) then
+        local records = lag_records[entity_index]
+        local network_info = network_channel_system and network_channel_system:get_network_info()
+        if records and network_info then
+            fake_lag_data = detect_fake_lag_manipulation(entity_index, records, network_info)
+            
+            -- Apply fake lag compensation to Riptide
+            if fake_lag_data and fake_lag_data.is_fake_lagging then
+                correction_result.fake_lag_compensation = fake_lag_data.confidence * 25
+                correction_result.fake_lag_type = fake_lag_data.manipulation_type
+                correction_result.fake_lag_confidence = fake_lag_data.confidence
+            end
+        end
+    end
     
     -- === WEAPON-SPECIFIC ANALYSIS V5 ===
     local function weapon_specific_analysis()
@@ -2189,13 +2212,15 @@ local function riptide_correction(animlayers, velocity, player_state, quantum_st
         (ai_pattern * 0.25) +
         (analytics_boost * 0.3) +
         (weapon_analysis * 0.4) +
-        (map_freestand * 0.35)
+        (map_freestand * 0.35) +
+        (correction_result.fake_lag_compensation * 0.5)
     
     -- === ULTRA IMPROVED V5 RIPTIDE FACTOR CALCULATION ===
     correction_result.riptide_factor = math_min(1.0,
         (math_abs(lag_comp_fix) + math_abs(anim_layer_fix) + math_abs(velocity_correlation) +
          math_abs(neural_prediction) * 0.8 + math_abs(ml_adjustment) * 0.7 + math_abs(quantum_fix) * 0.6 +
-         math_abs(weapon_analysis) * 0.9 + math_abs(map_freestand) * 0.8) / 58
+         math_abs(weapon_analysis) * 0.9 + math_abs(map_freestand) * 0.8 + 
+         math_abs(correction_result.fake_lag_compensation) * 0.7) / 58
     )
     
     -- === REVOLUTIONARY V5 CONFIDENCE SYSTEM ===
@@ -2212,11 +2237,12 @@ local function riptide_correction(animlayers, velocity, player_state, quantum_st
     local analytics_confidence = math_min(0.13, math_abs(analytics_boost) / 90)
     local weapon_confidence = math_min(0.12, math_abs(weapon_analysis) / 80)
     local map_confidence = math_min(0.10, math_abs(map_freestand) / 70)
+    local fake_lag_confidence = math_min(0.20, correction_result.fake_lag_confidence * 0.3)
     
     correction_result.confidence = math_min(1.0,
         base_confidence + movement_confidence + animation_confidence + temporal_confidence +
         neural_confidence + ml_confidence + quantum_confidence + ai_confidence + analytics_confidence +
-        weapon_confidence + map_confidence
+        weapon_confidence + map_confidence + fake_lag_confidence
     )
     
     -- Update V5 fields
@@ -2283,11 +2309,23 @@ local function riptide_correction(animlayers, velocity, player_state, quantum_st
         (correction_result.neural_adaptation_factor * 30) +
         (correction_result.dynamic_weight_optimization * 20) +
         (correction_result.weapon_specific_analysis or 0) * 0.8 +
-        (correction_result.map_aware_freestand or 0) * 0.6
+        (correction_result.map_aware_freestand or 0) * 0.6 +
+        (correction_result.fake_lag_compensation * 0.4)
     
     correction_result.algorithmic_evolution_score = 
         correction_result.confidence * correction_result.riptide_factor * 
         (1 + correction_result.temporal_consistency_score) * 0.85
+    
+    -- === FAKE LAG DEBUG LOGGING ===
+    if riptide_v5_debug and ui.get(riptide_v5_debug) and correction_result.fake_lag_compensation > 0 then
+        debug_log(string.format(
+            "[RIPTIDE-FAKELAG] Compensation: %.2f | Type: %s | Confidence: %.2f | Final Desync: %.2f",
+            correction_result.fake_lag_compensation,
+            correction_result.fake_lag_type,
+            correction_result.fake_lag_confidence,
+            correction_result.corrected_desync
+        ))
+    end
         
     return correction_result
 end
@@ -4488,7 +4526,11 @@ local function analyze_backtrack_records(entity_index)
                                     animation_prediction = bt_riptide_result.animation_prediction or 0,
                                     meta_learning_enhancement = bt_riptide_result.meta_learning_enhancement or 0,
                                     algorithmic_evolution_score = bt_riptide_result.algorithmic_evolution_score or 0,
-                                    confidence = bt_riptide_result.confidence
+                                    confidence = bt_riptide_result.confidence,
+                                    -- === FAKE LAG COMPENSATION DATA ===
+                                    fake_lag_compensation = bt_riptide_result.fake_lag_compensation or 0,
+                                    fake_lag_type = bt_riptide_result.fake_lag_type or "none",
+                                    fake_lag_confidence = bt_riptide_result.fake_lag_confidence or 0
                                 }
                                 
                                 -- === УЛЬТРА УЛУЧШЕННЫЙ V5 BONUS CALCULATION ===
@@ -4540,6 +4582,11 @@ local function analyze_backtrack_records(entity_index)
                                     riptide_bonus = riptide_bonus + (math_abs(bt_riptide_result.meta_learning_enhancement) * 0.4)
                                 end
                                 
+                                -- === FAKE LAG COMPENSATION BONUS ===
+                                if bt_riptide_result.fake_lag_compensation and bt_riptide_result.fake_lag_compensation > 0 then
+                                    riptide_bonus = riptide_bonus + (bt_riptide_result.fake_lag_compensation * 0.3)
+                                end
+                                
                                 -- ПРИНУДИТЕЛЬНО берем абсолютное значение бонуса
                                 riptide_bonus = math_abs(riptide_bonus)
                                 
@@ -4579,9 +4626,18 @@ local function analyze_backtrack_records(entity_index)
         local riptide_data = best_record.riptide_v5_data or {}
         local direction_data = best_record.direction_v2_data or {}
         
-        if riptide_data.riptide_factor and riptide_data.riptide_factor > 0.3 then
+                if riptide_data.riptide_factor and riptide_data.riptide_factor > 0.3 then
+            local fake_lag_info = ""
+            if riptide_data.fake_lag_compensation and riptide_data.fake_lag_compensation > 0 then
+                fake_lag_info = string.format(" | FakeLag: %.1f(%s,%.2f)", 
+                    riptide_data.fake_lag_compensation,
+                    riptide_data.fake_lag_type or "none",
+                    riptide_data.fake_lag_confidence or 0
+                )
+            end
+            
             debug_log(string.format(
-                "[BACKTRACK-V5-ANALYSIS] Entity: %d | Score: %.0f | 4D: %.0f | ML: %.0f | Weapon: %s | RF: %.2f | Enhanced Neural: %.1f | ML: %.1f | Quantum: %.1f | AI: %.1f | Analytics: %.1f | Weapon: %.1f | Map: %.1f | Neural Conf: %.2f | Dropout: %.2f | Meta: %.1f | Evolution: %.2f",
+                "[BACKTRACK-V5-ANALYSIS] Entity: %d | Score: %.0f | 4D: %.0f | ML: %.0f | Weapon: %s | RF: %.2f | Enhanced Neural: %.1f | ML: %.1f | Quantum: %.1f | AI: %.1f | Analytics: %.1f | Weapon: %.1f | Map: %.1f | Neural Conf: %.2f | Dropout: %.2f | Meta: %.1f | Evolution: %.2f%s",
                 entity_index,
                 best_record.enhanced_score,
                 best_record.record_4d_score or 0,
@@ -4595,10 +4651,11 @@ local function analyze_backtrack_records(entity_index)
                 riptide_data.predictive_analytics_boost or 0,
                 riptide_data.weapon_specific_analysis or 0,
                 riptide_data.map_aware_freestand or 0,
-                riptide_data.enhanced_neural_confidence or 0,
-                riptide_data.adaptive_dropout or 0,
-                riptide_data.meta_learning_enhancement or 0,
-                riptide_data.algorithmic_evolution_score or 0
+                                riptide_data.enhanced_neural_confidence or 0,
+                                riptide_data.adaptive_dropout or 0,
+                                riptide_data.meta_learning_enhancement or 0,
+                                riptide_data.algorithmic_evolution_score or 0,
+                                fake_lag_info
             ))
         end
     end
@@ -4915,6 +4972,42 @@ local function get_best_backtrack_record(entity_index)
         return nil
     end
     
+    -- === FAKE LAG DETECTION FOR BACKTRACK ===
+    local fake_lag_analysis = nil
+    if fake_lag_detection_enabled and ui.get(fake_lag_detection_enabled) then
+        fake_lag_analysis = detect_fake_lag_manipulation(entity_index, records, network_info)
+    else
+        fake_lag_analysis = { is_fake_lagging = false, confidence = 0, manipulation_type = "none" }
+    end
+    
+    if fake_lag_analysis.is_fake_lagging then
+        -- Adjust scoring for fake lag scenarios
+        for i, candidate in ipairs(candidate_records) do
+            if fake_lag_analysis.manipulation_type == "timing_manipulation" then
+                -- Boost records with consistent timing patterns
+                candidate.score = candidate.score * (1 + fake_lag_analysis.confidence * 0.3)
+            elseif fake_lag_analysis.manipulation_type == "movement_manipulation" then
+                -- Boost records with movement consistency
+                candidate.score = candidate.score * (1 + fake_lag_analysis.confidence * 0.2)
+            end
+            
+            if fake_lag_analysis.packet_manipulation then
+                -- Additional boost for packet manipulation
+                candidate.score = candidate.score * (1 + fake_lag_analysis.confidence * 0.25)
+            end
+        end
+        
+        -- Re-sort with adjusted scores
+        table.sort(candidate_records, function(a, b) return a.score > b.score end)
+        
+        debug_log(string.format(
+            "[BT-FAKELAG] Detected: %s | Type: %s | Confidence: %.2f | Adjusted scores",
+            fake_lag_analysis.is_fake_lagging and "YES" or "NO",
+            fake_lag_analysis.manipulation_type,
+            fake_lag_analysis.confidence
+        ))
+    end
+    
     -- Sort by score (highest first)
     table.sort(candidate_records, function(a, b) return a.score > b.score end)
     
@@ -4974,7 +5067,10 @@ local function get_best_backtrack_record(entity_index)
         candidates_count = #candidate_records,
         selection_time = globals.curtime(),
         network_compensated = network_info ~= nil,
-        adaptive_selection = player_metrics and player_metrics.accuracy > 0.8
+        adaptive_selection = player_metrics and player_metrics.accuracy > 0.8,
+        fake_lag_detected = fake_lag_analysis and fake_lag_analysis.is_fake_lagging or false,
+        fake_lag_type = fake_lag_analysis and fake_lag_analysis.manipulation_type or "none",
+        fake_lag_confidence = fake_lag_analysis and fake_lag_analysis.confidence or 0
     }
     
     if validation_passed then
@@ -6072,6 +6168,207 @@ local function extract_neural_features(entity_index)
     return features
 end
 
+-- === ADVANCED FAKE LAG DETECTION AND COMPENSATION SYSTEM ===
+local function detect_fake_lag_manipulation(entity_index, records, network_info)
+    if not records or #records < 5 then
+        return {
+            is_fake_lagging = false,
+            confidence = 0,
+            manipulation_type = "none",
+            compensation_factor = 1.0,
+            network_anomalies = {},
+            timing_patterns = {},
+            packet_manipulation = false
+        }
+    end
+    
+    local fake_lag_data = {
+        is_fake_lagging = false,
+        confidence = 0,
+        manipulation_type = "none",
+        compensation_factor = 1.0,
+        network_anomalies = {},
+        timing_patterns = {},
+        packet_manipulation = false
+    }
+    
+    -- Analyze timing patterns for artificial delays
+    local timing_analysis = {}
+    for i = 1, math.min(8, #records) do
+        if records[i] and records[i + 1] then
+            local time_diff = (records[i].simulation_time or 0) - (records[i + 1].simulation_time or 0)
+            if time_diff > 0 then
+                table.insert(timing_analysis, time_diff)
+            end
+        end
+    end
+    
+    -- Detect suspicious timing patterns
+    if #timing_analysis >= 3 then
+        local avg_timing = 0
+        for _, timing in ipairs(timing_analysis) do
+            avg_timing = avg_timing + timing
+        end
+        avg_timing = avg_timing / #timing_analysis
+        
+        -- Check for unnaturally consistent timing (fake lag indicator)
+        local timing_variance = 0
+        for _, timing in ipairs(timing_analysis) do
+            timing_variance = timing_variance + math.abs(timing - avg_timing)
+        end
+        timing_variance = timing_variance / #timing_analysis
+        
+        -- Low variance suggests artificial timing
+        if timing_variance < 0.001 and avg_timing > 0.008 then
+            fake_lag_data.is_fake_lagging = true
+            fake_lag_data.confidence = math.min(0.9, (0.001 - timing_variance) * 1000)
+            fake_lag_data.manipulation_type = "timing_manipulation"
+            fake_lag_data.timing_patterns = {
+                average = avg_timing,
+                variance = timing_variance,
+                samples = #timing_analysis
+            }
+        end
+    end
+    
+    -- Analyze network packet patterns
+    if network_info then
+        local packet_anomalies = {}
+        
+        -- Check for packet loss manipulation
+        if network_info.packet_loss and network_info.packet_loss.incoming > 0.15 then
+            local loss_pattern = network_info.packet_loss.incoming
+            if loss_pattern > 0.3 then
+                fake_lag_data.packet_manipulation = true
+                fake_lag_data.network_anomalies.packet_loss = loss_pattern
+                fake_lag_data.confidence = math.max(fake_lag_data.confidence, loss_pattern * 0.8)
+            end
+        end
+        
+        -- Check for choke manipulation
+        if network_info.choke and network_info.choke.incoming > 0.2 then
+            local choke_pattern = network_info.choke.incoming
+            if choke_pattern > 0.4 then
+                fake_lag_data.packet_manipulation = true
+                fake_lag_data.network_anomalies.choke = choke_pattern
+                fake_lag_data.confidence = math.max(fake_lag_data.confidence, choke_pattern * 0.7)
+            end
+        end
+        
+        -- Check for latency spikes
+        if network_info.latency and network_info.latency.incoming > 0.1 then
+            local latency_spike = network_info.latency.incoming
+            if latency_spike > 0.15 then
+                fake_lag_data.network_anomalies.latency_spike = latency_spike
+                fake_lag_data.confidence = math.max(fake_lag_data.confidence, (latency_spike - 0.1) * 2)
+            end
+        end
+    end
+    
+    -- Analyze movement patterns for artificial stuttering
+    local movement_analysis = {}
+    for i = 1, math.min(6, #records) do
+        if records[i] and records[i].velocity then
+            local speed = vector_length(records[i].velocity)
+            table.insert(movement_analysis, speed)
+        end
+    end
+    
+    if #movement_analysis >= 4 then
+        local speed_variance = 0
+        local avg_speed = 0
+        for _, speed in ipairs(movement_analysis) do
+            avg_speed = avg_speed + speed
+        end
+        avg_speed = avg_speed / #movement_analysis
+        
+        for _, speed in ipairs(movement_analysis) do
+            speed_variance = speed_variance + math.abs(speed - avg_speed)
+        end
+        speed_variance = speed_variance / #movement_analysis
+        
+        -- Unnaturally consistent speed during movement suggests fake lag
+        if avg_speed > 50 and speed_variance < 5 then
+            fake_lag_data.is_fake_lagging = true
+            fake_lag_data.confidence = math.max(fake_lag_data.confidence, (5 - speed_variance) * 0.2)
+            fake_lag_data.manipulation_type = "movement_manipulation"
+        end
+    end
+    
+    -- Calculate compensation factor based on confidence
+    if fake_lag_data.is_fake_lagging then
+        local base_compensation = 1.0 + (fake_lag_data.confidence * 0.5)
+        
+        -- Additional compensation for different manipulation types
+        if fake_lag_data.manipulation_type == "timing_manipulation" then
+            base_compensation = base_compensation * 1.3
+        elseif fake_lag_data.manipulation_type == "movement_manipulation" then
+            base_compensation = base_compensation * 1.2
+        end
+        
+        if fake_lag_data.packet_manipulation then
+            base_compensation = base_compensation * 1.4
+        end
+        
+        fake_lag_data.compensation_factor = math.min(2.5, base_compensation)
+    end
+    
+    return fake_lag_data
+end
+
+-- === ENHANCED FAKE LAG COMPENSATION ===
+local function apply_fake_lag_compensation(entity_index, fake_lag_data, base_desync, direction_data, network_info)
+    if not fake_lag_data or not fake_lag_data.is_fake_lagging then
+        return base_desync, direction_data
+    end
+    
+    local compensated_desync = base_desync
+    local compensated_direction = direction_data
+    
+    -- Apply timing manipulation compensation
+    if fake_lag_data.manipulation_type == "timing_manipulation" then
+        local timing_boost = fake_lag_data.timing_patterns.average * 1000
+        compensated_desync = compensated_desync * (1 + timing_boost * 0.1)
+        
+        -- Adjust direction prediction for timing manipulation
+        if fake_lag_data.timing_patterns.variance < 0.0005 then
+            -- Very low variance suggests predictable fake lag
+            compensated_direction.prediction_strength = math.min(0.95, compensated_direction.prediction_strength + 0.2)
+        end
+    end
+    
+    -- Apply movement manipulation compensation
+    if fake_lag_data.manipulation_type == "movement_manipulation" then
+        compensated_desync = compensated_desync * 1.15
+        
+        -- Enhance movement prediction
+        compensated_direction.movement_confidence = (compensated_direction.movement_confidence or 0.5) + 0.15
+    end
+    
+    -- Apply packet manipulation compensation
+    if fake_lag_data.packet_manipulation then
+        local packet_compensation = 1.0
+        
+        if fake_lag_data.network_anomalies.packet_loss then
+            packet_compensation = packet_compensation + (fake_lag_data.network_anomalies.packet_loss * 0.5)
+        end
+        
+        if fake_lag_data.network_anomalies.choke then
+            packet_compensation = packet_compensation + (fake_lag_data.network_anomalies.choke * 0.3)
+        end
+        
+        compensated_desync = compensated_desync * packet_compensation
+    end
+    
+    -- Apply overall compensation factor
+    compensated_desync = compensated_desync * fake_lag_data.compensation_factor
+    
+    -- Enhance prediction confidence for fake lag scenarios
+    compensated_direction.prediction_strength = math.min(0.95, compensated_direction.prediction_strength + (fake_lag_data.confidence * 0.1))
+    
+    return compensated_desync, compensated_direction
+end
+
 -- === ENHANCED AISETPOS RESOLUTION SYSTEM V4 ===
 local function resolve_aisetpos(entity_index)
     if not entity_is_alive(entity_index) or entity_is_dormant(entity_index) then
@@ -6181,6 +6478,14 @@ local function resolve_aisetpos(entity_index)
     
     -- Enhanced jitter detection with network awareness
     local jitter_analysis = wide_jitter_detection(entity_index, angle_history)
+    
+    -- === ADVANCED FAKE LAG DETECTION ===
+    local fake_lag_data = nil
+    if fake_lag_detection_enabled and ui.get(fake_lag_detection_enabled) then
+        fake_lag_data = detect_fake_lag_manipulation(entity_index, records, network_info)
+    else
+        fake_lag_data = { is_fake_lagging = false, confidence = 0, manipulation_type = "none", compensation_factor = 1.0 }
+    end
     
     -- Neural network feature extraction
     local neural_features = extract_neural_features(entity_index)
@@ -6297,13 +6602,14 @@ local function resolve_aisetpos(entity_index)
     end
 
     -- Apply direction with network + freestand compensation
-    local direction = direction_data.final_direction
+    local direction = compensated_direction and compensated_direction.final_direction or direction_data.final_direction
     if freestand and freestand.confidence > 0.2 then
         direction = freestand.dir ~= 0 and freestand.dir or direction
     end
     if last_dir ~= 0 and direction ~= last_dir then
         -- Smooth flips when confidence is low
-        if (direction_data.prediction_strength or 0.5) < 0.6 then
+        local prediction_strength = compensated_direction and compensated_direction.prediction_strength or direction_data.prediction_strength
+        if (prediction_strength or 0.5) < 0.6 then
             direction = last_dir
         end
     end
@@ -6327,7 +6633,8 @@ local function resolve_aisetpos(entity_index)
                     local cross = e2l.x * lv.y - e2l.y * lv.x
                     local bias_sign = cross >= 0 and 1 or -1
                     local bias_strength = math_min(1.0, speed2d / 250)
-                    if (direction_data.prediction_strength or 0.5) < 0.8 then
+                    local prediction_strength = compensated_direction and compensated_direction.prediction_strength or direction_data.prediction_strength
+                    if (prediction_strength or 0.5) < 0.8 then
                         direction = (bias_strength > 0.25) and bias_sign or direction
                     end
                 end
@@ -6347,7 +6654,7 @@ local function resolve_aisetpos(entity_index)
             local cross = fwd.x * vnorm.y - fwd.y * vnorm.x
             local lateral_weight = math_abs(cross)
             local bias_sign = (cross >= 0) and 1 or -1
-            local dir_conf = direction_data.prediction_strength or 0.5
+            local dir_conf = compensated_direction and compensated_direction.prediction_strength or direction_data.prediction_strength
             if dir_conf < 0.85 then
                 if lateral_weight > 0.35 then
                     direction = bias_sign
@@ -6438,13 +6745,23 @@ local function resolve_aisetpos(entity_index)
             end
         end
         
+        -- === APPLY FAKE LAG COMPENSATION ===
+        local compensated_desync, compensated_direction = apply_fake_lag_compensation(
+            entity_index, fake_lag_data, jitter_correction, direction_data, network_info
+        )
+        
         -- Calculate final desync with network awareness
         local network_desync_modifier = 1.0
         if jitter_analysis.classification_data and jitter_analysis.classification_data.network_influenced then
             network_desync_modifier = 1.2
         end
         
-        base_desync = jitter_correction * network_desync_modifier
+        -- Apply fake lag compensation to final desync
+        if fake_lag_data.is_fake_lagging then
+            network_desync_modifier = network_desync_modifier * fake_lag_data.compensation_factor
+        end
+        
+        base_desync = compensated_desync * network_desync_modifier
         resolved_yaw = resolved_yaw + (direction * base_desync)
         
         -- Store direction with network context
@@ -6528,7 +6845,7 @@ local function resolve_aisetpos(entity_index)
         jitter_confidence = jitter_analysis.confidence,
         network_stability = network_quality and network_quality.score or 1.0,
         packet_correlation = jitter_analysis.packet_correlation or 0,
-        prediction_accuracy = (direction_data.prediction_strength or 0.5)
+        prediction_accuracy = (compensated_direction and compensated_direction.prediction_strength or direction_data.prediction_strength or 0.5)
             + (freestand and freestand.confidence or 0) * 0.1
     }
     
@@ -6565,14 +6882,24 @@ local function resolve_aisetpos(entity_index)
     
     -- Debug logging
     if riptide_v5_debug and ui.get(riptide_v5_debug) then
+        local fake_lag_info = ""
+        if fake_lag_data and fake_lag_data.is_fake_lagging then
+            fake_lag_info = string.format(" | FakeLag: %s(%.2f) | Type: %s", 
+                fake_lag_data.is_fake_lagging and "YES" or "NO",
+                fake_lag_data.confidence,
+                fake_lag_data.manipulation_type
+            )
+        end
+        
         debug_log(string.format(
-            "[AISETPOS-V4] %s | Yaw: %.1f° | Desync: %.1f° | Quality: %.2f | Network: %.2f | Latency: %.1fms",
+            "[AISETPOS-V4] %s | Yaw: %.1f° | Desync: %.1f° | Quality: %.2f | Network: %.2f | Latency: %.1fms%s",
             player_name,
             normalize_angle_safe(resolved_yaw),
             base_desync,
             data.performance_metrics.resolution_quality,
             network_quality and network_quality.score or 1.0,
-            network_info and ((network_info.latency.incoming + network_info.latency.outgoing) / 2) * 1000 or 0
+            network_info and ((network_info.latency.incoming + network_info.latency.outgoing) / 2) * 1000 or 0,
+            fake_lag_info
         ))
     end
     
