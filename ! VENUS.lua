@@ -146,6 +146,468 @@ local function get_hitbox_bbox_via_studio(ent, hitbox_id)
     }
 end
 
+-- === ADVANCED HITBOX MATRIX SYSTEM FOR IMPROVED RESOLVING ===
+-- Система матрицы хитбоксов для точного резольвинга через геометрию
+
+-- Расширенные структуры для хитбоксов
+ffi.cdef[[
+    typedef struct {
+        float m[3][4];
+    } matrix3x4_t;
+    
+    typedef struct {
+        int bone;
+        int group;
+        float bbmin[3];
+        float bbmax[3];
+        int name_index;
+        int pad[3];
+        float radius;
+        int group_unknown;
+    } mstudiobbox_t;
+    
+    typedef struct {
+        int name_index;
+        int num_hitboxes;
+        int hitbox_index;
+    } mstudiohitboxset_t;
+    
+    typedef struct {
+        int bone;
+        int parent;
+        int flags;
+        int name_index;
+        int unused[6];
+        float pos[3];
+        float quat[4];
+        float rot[3];
+        matrix3x4_t pose_to_bone;
+        float alignment[4];
+        int proc_type;
+        int proc_index;
+        int proc_vertex_start;
+        int proc_vertex_count;
+        int proc_tri_start;
+        int proc_tri_count;
+        int proc_flags;
+        int proc_bone;
+        int proc_rule;
+        int proc_vertex_data;
+        int proc_offset;
+    } mstudiobone_t;
+]]
+
+-- Кэш матриц хитбоксов для каждого тика
+local hitbox_matrix_cache = { tick = -1, per_entity = {} }
+
+-- Получение точной матрицы хитбокса через studiohdr
+local function get_hitbox_matrix_precise(entity_index, hitbox_id)
+    if not entity_index or not hitbox_id then return nil end
+    
+    local entity = entity.get_client_entity(entity_index)
+    if not entity then return nil end
+    
+    local hdr = get_studiohdr_for_entity(entity)
+    if not hdr then return nil end
+    
+    -- Получаем хитбокс сет
+    local hitbox_set = ffi.cast("mstudiohitboxset_t*", ffi.cast("uint8_t*", hdr) + hdr.hitboxset_index)
+    if not hitbox_set or hitbox_set.num_hitboxes <= hitbox_id then return nil end
+    
+    -- Получаем конкретный хитбокс
+    local bbox = ffi.cast("mstudiobbox_t*", ffi.cast("uint8_t*", hitbox_set) + hitbox_set.hitbox_index + hitbox_id * ffi.sizeof("mstudiobbox_t"))
+    if not bbox then return nil end
+    
+    -- Получаем кости
+    local bones = get_bones_cached(entity)
+    if not bones then return nil end
+    
+    local bone_index = bbox.bone
+    if bone_index < 0 or bone_index >= 128 then return nil end
+    
+    local bone_matrix = bones[bone_index]
+    if not bone_matrix then return nil end
+    
+    return {
+        matrix = bone_matrix,
+        bbox = bbox,
+        bone_index = bone_index,
+        center_local = {
+            x = (bbox.bbmin[0] + bbox.bbmax[0]) / 2,
+            y = (bbox.bbmin[1] + bbox.bbmax[1]) / 2,
+            z = (bbox.bbmin[2] + bbox.bbmax[2]) / 2
+        },
+        mins_local = { x = bbox.bbmin[0], y = bbox.bbmin[1], z = bbox.bbmin[2] },
+        maxs_local = { x = bbox.bbmax[0], y = bbox.bbmax[1], z = bbox.bbmax[2] },
+        radius = bbox.radius or 0
+    }
+end
+
+-- Трансформация точки через матрицу с высокой точностью
+local function transform_point_precise(matrix, point)
+    if not matrix or not point then return nil end
+    
+    return {
+        x = matrix.m[0][0] * point.x + matrix.m[0][1] * point.y + matrix.m[0][2] * point.z + matrix.m[0][3],
+        y = matrix.m[1][0] * point.x + matrix.m[1][1] * point.y + matrix.m[1][2] * point.z + matrix.m[1][3],
+        z = matrix.m[2][0] * point.x + matrix.m[2][1] * point.y + matrix.m[2][2] * point.z + matrix.m[2][3]
+    }
+end
+
+-- Получение мировых координат хитбокса через матрицу
+local function get_hitbox_world_coords(entity_index, hitbox_id)
+    local hitbox_data = get_hitbox_matrix_precise(entity_index, hitbox_id)
+    if not hitbox_data then return nil end
+    
+    local center_world = transform_point_precise(hitbox_data.matrix, hitbox_data.center_local)
+    local mins_world = transform_point_precise(hitbox_data.matrix, hitbox_data.mins_local)
+    local maxs_world = transform_point_precise(hitbox_data.matrix, hitbox_data.maxs_local)
+    
+    if not center_world or not mins_world or not maxs_world then return nil end
+    
+    return {
+        center = center_world,
+        mins = mins_world,
+        maxs = maxs_world,
+        radius = hitbox_data.radius,
+        bone_index = hitbox_data.bone_index,
+        matrix = hitbox_data.matrix
+    }
+end
+
+-- Анализ десинка через матрицу хитбоксов
+local function analyze_desync_via_hitbox_matrix(entity_index, hitbox_id, angle_offset)
+    local hitbox_data = get_hitbox_matrix_precise(entity_index, hitbox_id)
+    if not hitbox_data then return nil end
+    
+    -- Создаем матрицу с поворотом для анализа десинка
+    local rotation_matrix = ffi.new("matrix3x4_t")
+    
+    -- Применяем поворот к матрице кости
+    local angle_rad = math.rad(angle_offset or 0)
+    local cos_a = math.cos(angle_rad)
+    local sin_a = math.sin(angle_rad)
+    
+    -- Поворот вокруг оси Z (Yaw)
+    rotation_matrix.m[0][0] = cos_a
+    rotation_matrix.m[0][1] = -sin_a
+    rotation_matrix.m[0][2] = 0
+    rotation_matrix.m[0][3] = 0
+    
+    rotation_matrix.m[1][0] = sin_a
+    rotation_matrix.m[1][1] = cos_a
+    rotation_matrix.m[1][2] = 0
+    rotation_matrix.m[1][3] = 0
+    
+    rotation_matrix.m[2][0] = 0
+    rotation_matrix.m[2][1] = 0
+    rotation_matrix.m[2][2] = 1
+    rotation_matrix.m[2][3] = 0
+    
+    -- Комбинируем матрицы
+    local combined_matrix = ffi.new("matrix3x4_t")
+    for i = 0, 2 do
+        for j = 0, 3 do
+            combined_matrix.m[i][j] = 0
+            for k = 0, 2 do
+                combined_matrix.m[i][j] = combined_matrix.m[i][j] + rotation_matrix.m[i][k] * hitbox_data.matrix.m[k][j]
+            end
+            if j == 3 then
+                combined_matrix.m[i][j] = combined_matrix.m[i][j] + rotation_matrix.m[i][3]
+            end
+        end
+    end
+    
+    -- Трансформируем точки с новой матрицей
+    local center_rotated = transform_point_precise(combined_matrix, hitbox_data.center_local)
+    local mins_rotated = transform_point_precise(combined_matrix, hitbox_data.mins_local)
+    local maxs_rotated = transform_point_precise(combined_matrix, hitbox_data.maxs_local)
+    
+    if not center_rotated or not mins_rotated or not maxs_rotated then return nil end
+    
+    -- Вычисляем смещение от оригинальной позиции
+    local original_center = transform_point_precise(hitbox_data.matrix, hitbox_data.center_local)
+    if not original_center then return nil end
+    
+    local desync_offset = {
+        x = center_rotated.x - original_center.x,
+        y = center_rotated.y - original_center.y,
+        z = center_rotated.z - original_center.z
+    }
+    
+    local desync_magnitude = math.sqrt(desync_offset.x^2 + desync_offset.y^2 + desync_offset.z^2)
+    
+    return {
+        original_center = original_center,
+        rotated_center = center_rotated,
+        rotated_mins = mins_rotated,
+        rotated_maxs = maxs_rotated,
+        desync_offset = desync_offset,
+        desync_magnitude = desync_magnitude,
+        angle_offset = angle_offset,
+        matrix = combined_matrix,
+        original_matrix = hitbox_data.matrix
+    }
+end
+
+-- Система предсказания хитбоксов через матрицу
+local function predict_hitbox_via_matrix(entity_index, hitbox_id, prediction_time, velocity)
+    local hitbox_data = get_hitbox_matrix_precise(entity_index, hitbox_id)
+    if not hitbox_data then return nil end
+    
+    -- Получаем текущую позицию
+    local current_center = transform_point_precise(hitbox_data.matrix, hitbox_data.center_local)
+    if not current_center then return nil end
+    
+    -- Предсказываем будущую позицию на основе скорости
+    local predicted_center = {
+        x = current_center.x + (velocity.x * prediction_time),
+        y = current_center.y + (velocity.y * prediction_time),
+        z = current_center.z + (velocity.z * prediction_time)
+    }
+    
+    -- Создаем матрицу смещения
+    local offset_matrix = ffi.new("matrix3x4_t")
+    for i = 0, 2 do
+        for j = 0, 3 do
+            offset_matrix.m[i][j] = hitbox_data.matrix.m[i][j]
+        end
+    end
+    
+    -- Применяем смещение к матрице
+    offset_matrix.m[0][3] = offset_matrix.m[0][3] + (velocity.x * prediction_time)
+    offset_matrix.m[1][3] = offset_matrix.m[1][3] + (velocity.y * prediction_time)
+    offset_matrix.m[2][3] = offset_matrix.m[2][3] + (velocity.z * prediction_time)
+    
+    -- Трансформируем точки с предсказанной матрицей
+    local predicted_mins = transform_point_precise(offset_matrix, hitbox_data.mins_local)
+    local predicted_maxs = transform_point_precise(offset_matrix, hitbox_data.maxs_local)
+    
+    if not predicted_mins or not predicted_maxs then return nil end
+    
+    return {
+        current_center = current_center,
+        predicted_center = predicted_center,
+        predicted_mins = predicted_mins,
+        predicted_maxs = predicted_maxs,
+        prediction_time = prediction_time,
+        velocity = velocity,
+        matrix = offset_matrix,
+        original_matrix = hitbox_data.matrix
+    }
+end
+
+-- Анализ пересечений хитбоксов через матрицу
+local function analyze_hitbox_intersection_via_matrix(entity_index, hitbox_id, ray_start, ray_end)
+    local hitbox_data = get_hitbox_matrix_precise(entity_index, hitbox_id)
+    if not hitbox_data then return nil end
+    
+    -- Трансформируем луч в локальные координаты хитбокса
+    local local_ray_start = {
+        x = ray_start.x - hitbox_data.matrix.m[0][3],
+        y = ray_start.y - hitbox_data.matrix.m[1][3],
+        z = ray_start.z - hitbox_data.matrix.m[2][3]
+    }
+    
+    local local_ray_end = {
+        x = ray_end.x - hitbox_data.matrix.m[0][3],
+        y = ray_end.y - hitbox_data.matrix.m[1][3],
+        z = ray_end.z - hitbox_data.matrix.m[2][3]
+    }
+    
+    -- Вычисляем направление луча
+    local ray_direction = {
+        x = local_ray_end.x - local_ray_start.x,
+        y = local_ray_end.y - local_ray_start.y,
+        z = local_ray_end.z - local_ray_start.z
+    }
+    
+    local ray_length = math.sqrt(ray_direction.x^2 + ray_direction.y^2 + ray_direction.z^2)
+    if ray_length < 0.001 then return nil end
+    
+    -- Нормализуем направление
+    ray_direction.x = ray_direction.x / ray_length
+    ray_direction.y = ray_direction.y / ray_length
+    ray_direction.z = ray_direction.z / ray_length
+    
+    -- Проверяем пересечение с AABB хитбокса
+    local t_min = -math.huge
+    local t_max = math.huge
+    
+    for i = 0, 2 do
+        local axis_min = hitbox_data.mins_local[i == 0 and "x" or i == 1 and "y" or "z"]
+        local axis_max = hitbox_data.maxs_local[i == 0 and "x" or i == 1 and "y" or "z"]
+        local ray_origin = i == 0 and local_ray_start.x or i == 1 and local_ray_start.y or local_ray_start.z
+        local ray_dir = i == 0 and ray_direction.x or i == 1 and ray_direction.y or local_ray_start.z
+        
+        if math.abs(ray_dir) > 0.001 then
+            local t1 = (axis_min - ray_origin) / ray_dir
+            local t2 = (axis_max - ray_origin) / ray_dir
+            
+            if t1 > t2 then
+                local temp = t1
+                t1 = t2
+                t2 = temp
+            end
+            
+            if t1 > t_min then t_min = t1 end
+            if t2 < t_max then t_max = t2 end
+        end
+    end
+    
+    -- Проверяем валидность пересечения
+    if t_min > t_max or t_max < 0 then return nil end
+    
+    -- Вычисляем точку пересечения
+    local intersection_local = {
+        x = local_ray_start.x + ray_direction.x * t_min,
+        y = local_ray_start.y + ray_direction.y * t_min,
+        z = local_ray_start.z + ray_direction.z * t_min
+    }
+    
+    -- Трансформируем обратно в мировые координаты
+    local intersection_world = transform_point_precise(hitbox_data.matrix, intersection_local)
+    
+    return {
+        intersection = intersection_world,
+        distance = t_min,
+        hitbox_data = hitbox_data,
+        ray_start = ray_start,
+        ray_end = ray_end,
+        local_intersection = intersection_local
+    }
+end
+
+-- Система валидации хитбоксов через матрицу
+local function validate_hitbox_via_matrix(entity_index, hitbox_id, angle_offsets)
+    if not angle_offsets or #angle_offsets == 0 then return nil end
+    
+    local validation_results = {}
+    
+    for _, angle_offset in ipairs(angle_offsets) do
+        local desync_analysis = analyze_desync_via_hitbox_matrix(entity_index, hitbox_id, angle_offset)
+        if desync_analysis then
+            table.insert(validation_results, {
+                angle_offset = angle_offset,
+                desync_magnitude = desync_analysis.desync_magnitude,
+                desync_offset = desync_analysis.desync_offset,
+                matrix = desync_analysis.matrix
+            })
+        end
+    end
+    
+    if #validation_results == 0 then return nil end
+    
+    -- Сортируем по величине десинка
+    table.sort(validation_results, function(a, b)
+        return a.desync_magnitude > b.desync_magnitude
+    end)
+    
+    return {
+        results = validation_results,
+        best_angle = validation_results[1].angle_offset,
+        best_desync = validation_results[1].desync_magnitude,
+        total_results = #validation_results
+    }
+end
+
+-- Кэширование результатов анализа хитбоксов
+local hitbox_analysis_cache = { tick = -1, per_entity = {} }
+
+local function get_cached_hitbox_analysis(entity_index, hitbox_id, angle_offset)
+    local current_tick = globals.tickcount()
+    
+    if hitbox_analysis_cache.tick ~= current_tick then
+        hitbox_analysis_cache.tick = current_tick
+        hitbox_analysis_cache.per_entity = {}
+    end
+    
+    local entity_cache = hitbox_analysis_cache.per_entity[entity_index] or {}
+    local cache_key = string.format("%d_%.2f", hitbox_id, angle_offset or 0)
+    
+    if entity_cache[cache_key] then
+        return entity_cache[cache_key]
+    end
+    
+    local analysis = analyze_desync_via_hitbox_matrix(entity_index, hitbox_id, angle_offset)
+    if analysis then
+        entity_cache[cache_key] = analysis
+        hitbox_analysis_cache.per_entity[entity_index] = entity_cache
+    end
+    
+    return analysis
+end
+
+-- === ENHANCED HITBOX MATRIX RESOLVING SYSTEM ===
+-- Система резольвинга через матрицу хитбоксов для максимальной точности
+
+local function resolve_via_hitbox_matrix(entity_index, hitbox_id, base_desync, confidence)
+    local hitbox_data = get_hitbox_matrix_precise(entity_index, hitbox_id)
+    if not hitbox_data then return base_desync, confidence end
+    
+    -- Анализируем различные углы десинка
+    local test_angles = {-58, -29, 0, 29, 58}
+    local validation = validate_hitbox_via_matrix(entity_index, hitbox_id, test_angles)
+    
+    if not validation then return base_desync, confidence end
+    
+    -- Находим лучший угол на основе анализа хитбокса
+    local best_angle = validation.best_angle
+    local best_desync = validation.best_desync
+    
+    -- Корректируем базовый десинк на основе анализа матрицы
+    local matrix_correction = best_desync * (confidence or 0.5)
+    local corrected_desync = base_desync + matrix_correction
+    
+    -- Улучшаем уверенность на основе качества анализа
+    local matrix_confidence = math.min(1.0, confidence + (validation.total_results / #test_angles) * 0.2)
+    
+    return corrected_desync, matrix_confidence
+end
+
+-- Система предсказания хитбоксов для резольвинга
+local function predict_hitbox_for_resolving(entity_index, hitbox_id, time_ahead)
+    local entity = entity.get_client_entity(entity_index)
+    if not entity then return nil end
+    
+    local velocity = vector3(entity_get_prop(entity, "m_vecVelocity"))
+    if not velocity then return nil end
+    
+    local prediction = predict_hitbox_via_matrix(entity_index, hitbox_id, time_ahead, velocity)
+    if not prediction then return nil end
+    
+    return prediction
+end
+
+-- Интеграция матрицы хитбоксов в основной резольвинг
+local function integrate_hitbox_matrix_resolving(entity_index, base_desync, confidence, hitbox_id)
+    hitbox_id = hitbox_id or 0 -- По умолчанию используем голову
+    
+    -- Получаем анализ через матрицу хитбоксов
+    local matrix_desync, matrix_confidence = resolve_via_hitbox_matrix(entity_index, hitbox_id, base_desync, confidence)
+    
+    -- Предсказываем будущую позицию хитбокса
+    local prediction = predict_hitbox_for_resolving(entity_index, hitbox_id, 0.1) -- 100ms вперед
+    
+    local final_desync = matrix_desync
+    local final_confidence = matrix_confidence
+    
+    -- Если есть предсказание, корректируем десинк
+    if prediction then
+        local prediction_correction = prediction.predicted_center.x - prediction.current_center.x
+        final_desync = final_desync + (prediction_correction * 0.3)
+        final_confidence = math.min(1.0, final_confidence + 0.1)
+    end
+    
+    return {
+        desync = final_desync,
+        confidence = final_confidence,
+        matrix_analysis = true,
+        hitbox_id = hitbox_id,
+        prediction = prediction
+    }
+end
+
 -- UI Menu Creation
 local ui_get = ui.get
 
@@ -153,6 +615,12 @@ local ui_get = ui.get
 
 riptide_v5_debug = ui.new_checkbox("rage", "other", "Debug Logs")
 fake_lag_detection_enabled = ui.new_checkbox("rage", "other", "Fake Lag Detection")
+
+-- === HITBOX MATRIX RESOLVING CONTROLS ===
+local hitbox_matrix_resolving = ui.new_checkbox("rage", "other", "Hitbox Matrix Resolving")
+local hitbox_matrix_debug = ui.new_checkbox("rage", "other", "Hitbox Matrix Debug")
+local hitbox_matrix_quality = ui.new_slider("rage", "other", "Matrix Quality", 1, 5, 3, true, "x")
+local hitbox_matrix_prediction = ui.new_slider("rage", "other", "Matrix Prediction", 0, 200, 100, true, "ms")
 
 -- Core variables and references
 local client_camera_angles = client.camera_angles
@@ -2214,6 +2682,43 @@ function riptide_correction(animlayers, velocity, player_state, quantum_state, n
         (weapon_analysis * 0.4) +
         (map_freestand * 0.35) +
         (correction_result.fake_lag_compensation * 0.5)
+    
+    -- === HITBOX MATRIX INTEGRATION ===
+    -- Интеграция системы матрицы хитбоксов для улучшения резольвинга
+    if hitbox_matrix_resolving and ui.get(hitbox_matrix_resolving) then
+        local matrix_resolution = integrate_hitbox_matrix_resolving(
+            entity_index, 
+            correction_result.corrected_desync, 
+            correction_result.confidence, 
+            0 -- Голова по умолчанию
+        )
+        
+        if matrix_resolution and matrix_resolution.matrix_analysis then
+            -- Применяем коррекцию от матрицы хитбоксов
+            local matrix_correction = matrix_resolution.desync - correction_result.corrected_desync
+            correction_result.corrected_desync = correction_result.corrected_desync + (matrix_correction * 0.4)
+            
+            -- Улучшаем уверенность на основе анализа матрицы
+            correction_result.confidence = math.min(1.0, 
+                correction_result.confidence + (matrix_resolution.confidence - correction_result.confidence) * 0.3
+            )
+            
+            -- Добавляем информацию о матрице в результат
+            correction_result.hitbox_matrix_correction = matrix_correction
+            correction_result.hitbox_matrix_confidence = matrix_resolution.confidence
+            correction_result.hitbox_matrix_prediction = matrix_resolution.prediction
+            
+            -- Debug логирование для матрицы хитбоксов
+            if hitbox_matrix_debug and ui.get(hitbox_matrix_debug) then
+                debug_log(string.format(
+                    "[HITBOX-MATRIX] Correction: %.2f | Confidence: %.2f | Final Desync: %.2f",
+                    matrix_correction,
+                    matrix_resolution.confidence,
+                    correction_result.corrected_desync
+                ))
+            end
+        end
+    end
     
     -- === ULTRA IMPROVED V5 RIPTIDE FACTOR CALCULATION ===
     correction_result.riptide_factor = math_min(1.0,
@@ -4530,7 +5035,11 @@ local function analyze_backtrack_records(entity_index)
                                     -- === FAKE LAG COMPENSATION DATA ===
                                     fake_lag_compensation = bt_riptide_result.fake_lag_compensation or 0,
                                     fake_lag_type = bt_riptide_result.fake_lag_type or "none",
-                                    fake_lag_confidence = bt_riptide_result.fake_lag_confidence or 0
+                                    fake_lag_confidence = bt_riptide_result.fake_lag_confidence or 0,
+                                    -- === HITBOX MATRIX DATA ===
+                                    hitbox_matrix_correction = bt_riptide_result.hitbox_matrix_correction or 0,
+                                    hitbox_matrix_confidence = bt_riptide_result.hitbox_matrix_confidence or 0,
+                                    hitbox_matrix_prediction = bt_riptide_result.hitbox_matrix_prediction or nil
                                 }
                                 
                                 -- === УЛЬТРА УЛУЧШЕННЫЙ V5 BONUS CALCULATION ===
@@ -4585,6 +5094,15 @@ local function analyze_backtrack_records(entity_index)
                                 -- === FAKE LAG COMPENSATION BONUS ===
                                 if bt_riptide_result.fake_lag_compensation and bt_riptide_result.fake_lag_compensation > 0 then
                                     riptide_bonus = riptide_bonus + (bt_riptide_result.fake_lag_compensation * 0.3)
+                                end
+                                
+                                -- === HITBOX MATRIX BONUS ===
+                                if bt_riptide_result.hitbox_matrix_correction and bt_riptide_result.hitbox_matrix_correction > 0 then
+                                    riptide_bonus = riptide_bonus + (bt_riptide_result.hitbox_matrix_correction * 0.4)
+                                end
+                                
+                                if bt_riptide_result.hitbox_matrix_confidence and bt_riptide_result.hitbox_matrix_confidence > 0.5 then
+                                    riptide_bonus = riptide_bonus + (bt_riptide_result.hitbox_matrix_confidence * 100)
                                 end
                                 
                                 -- ПРИНУДИТЕЛЬНО берем абсолютное значение бонуса
@@ -5070,14 +5588,31 @@ local function get_best_backtrack_record(entity_index)
         adaptive_selection = player_metrics and player_metrics.accuracy > 0.8,
         fake_lag_detected = fake_lag_analysis and fake_lag_analysis.is_fake_lagging or false,
         fake_lag_type = fake_lag_analysis and fake_lag_analysis.manipulation_type or "none",
-        fake_lag_confidence = fake_lag_analysis and fake_lag_analysis.confidence or 0
+        fake_lag_confidence = fake_lag_analysis and fake_lag_analysis.confidence or 0,
+        hitbox_matrix_enabled = hitbox_matrix_resolving and ui.get(hitbox_matrix_resolving) or false,
+        hitbox_matrix_quality = hitbox_matrix_quality and ui.get(hitbox_matrix_quality) or 3
     }
     
     if validation_passed then
-        debug_log(string.format(
+        -- Enhanced debug logging with hitbox matrix info
+        local debug_info = string.format(
             "[BT-SELECTED] Score: %.1f | Time: %.3fs | Pos: %.1f | Candidates: %d",
             candidate_records[1].score, candidate_records[1].time_diff, position_diff, #candidate_records
-        ))
+        )
+        
+        -- Add hitbox matrix info if enabled
+        if hitbox_matrix_resolving and ui.get(hitbox_matrix_resolving) then
+            local matrix_info = ""
+            if selected_record.riptide_v5_data and selected_record.riptide_v5_data.hitbox_matrix_correction then
+                matrix_info = string.format(" | Matrix: %.2f (%.2f)", 
+                    selected_record.riptide_v5_data.hitbox_matrix_correction,
+                    selected_record.riptide_v5_data.hitbox_matrix_confidence or 0
+                )
+            end
+            debug_info = debug_info .. matrix_info
+        end
+        
+        debug_log(debug_info)
         return selected_record
     else
         debug_log("[BT-REJECTED] " .. table.concat(validation_reasons, ", "))
@@ -5238,6 +5773,42 @@ local function apply_backtrack_to_target(entity_index, record)
         end
     end
     
+    -- === HITBOX MATRIX INTEGRATION FOR BACKTRACK APPLICATION ===
+    -- Интеграция системы матрицы хитбоксов для улучшения применения backtrack
+    if success and hitbox_matrix_resolving and ui.get(hitbox_matrix_resolving) then
+        if record.riptide_v5_data and record.riptide_v5_data.hitbox_matrix_correction then
+            -- Применяем коррекцию от матрицы хитбоксов к позиции
+            local matrix_correction = record.riptide_v5_data.hitbox_matrix_correction
+            local matrix_confidence = record.riptide_v5_data.hitbox_matrix_confidence or 0
+            
+            if matrix_confidence > 0.3 then
+                -- Корректируем позицию на основе анализа матрицы хитбоксов
+                local correction_factor = math.min(0.5, matrix_confidence * 0.8)
+                local corrected_position = {
+                    x = final_position.x + (matrix_correction * correction_factor),
+                    y = final_position.y + (matrix_correction * correction_factor),
+                    z = final_position.z
+                }
+                
+                -- Применяем скорректированную позицию
+                local pos_success = pcall(function()
+                    entity_set_prop(entity_index, "m_vecOrigin[0]", corrected_position.x)
+                    entity_set_prop(entity_index, "m_vecOrigin[1]", corrected_position.y)
+                    entity_set_prop(entity_index, "m_vecOrigin[2]", corrected_position.z)
+                end)
+                
+                if pos_success then
+                    final_position = corrected_position
+                    debug_log(string.format(
+                        "[BT-MATRIX] Applied matrix correction: %.2f (confidence: %.2f)",
+                        matrix_correction,
+                        matrix_confidence
+                    ))
+                end
+            end
+        end
+    end
+    
     -- Record application result for learning
     if success then
         local player_data_entry = player_data[entity_index]
@@ -5257,7 +5828,10 @@ local function apply_backtrack_to_target(entity_index, record)
                 score = record.backtrack_metadata and record.backtrack_metadata.score or 0,
                 position_diff = record.backtrack_metadata and record.backtrack_metadata.position_diff or 0,
                 timestamp = globals.curtime(),
-                interpolated = final_position ~= record.origin
+                interpolated = final_position ~= record.origin,
+                hitbox_matrix_applied = record.riptide_v5_data and record.riptide_v5_data.hitbox_matrix_correction and true or false,
+                matrix_correction = record.riptide_v5_data and record.riptide_v5_data.hitbox_matrix_correction or 0,
+                matrix_confidence = record.riptide_v5_data and record.riptide_v5_data.hitbox_matrix_confidence or 0
             })
             
             -- Limit history size
@@ -6821,6 +7395,50 @@ local function resolve_aisetpos(entity_index)
         riptide_perf.last_update = globals.curtime()
     end
     
+    -- === HITBOX MATRIX INTEGRATION FOR AISETPOS ===
+    -- Интеграция системы матрицы хитбоксов для улучшения резольвинга в AISETPOS
+    if hitbox_matrix_resolving and ui.get(hitbox_matrix_resolving) then
+        local matrix_resolution = integrate_hitbox_matrix_resolving(
+            entity_index, 
+            base_desync, 
+            data.performance_metrics.resolution_quality or 0.5, 
+            0 -- Голова по умолчанию
+        )
+        
+        if matrix_resolution and matrix_resolution.matrix_analysis then
+            -- Применяем коррекцию от матрицы хитбоксов
+            local matrix_correction = matrix_resolution.desync - base_desync
+            local final_desync = base_desync + (matrix_correction * 0.35)
+            
+            -- Обновляем resolved_yaw с коррекцией от матрицы
+            resolved_yaw = resolved_yaw + (direction * matrix_correction * 0.35)
+            
+            -- Улучшаем качество резольвинга на основе анализа матрицы
+            data.performance_metrics.resolution_quality = math.min(1.0, 
+                (data.performance_metrics.resolution_quality or 0.5) + (matrix_resolution.confidence - (data.performance_metrics.resolution_quality or 0.5)) * 0.25
+            )
+            
+            -- Сохраняем информацию о матрице для отладки
+            data.hitbox_matrix_data = {
+                correction = matrix_correction,
+                confidence = matrix_resolution.confidence,
+                prediction = matrix_resolution.prediction,
+                timestamp = globals.curtime()
+            }
+            
+            -- Debug логирование для матрицы хитбоксов в AISETPOS
+            if hitbox_matrix_debug and ui.get(hitbox_matrix_debug) then
+                debug_log(string.format(
+                    "[AISETPOS-MATRIX] Entity: %s | Matrix Correction: %.2f | Confidence: %.2f | Final Desync: %.2f",
+                    player_name,
+                    matrix_correction,
+                    matrix_resolution.confidence,
+                    final_desync
+                ))
+            end
+        end
+    end
+    
     -- Enhanced performance tracking
     data.last_resolve = globals.curtime()
     data.performance_metrics.last_update = globals.curtime()
@@ -7062,14 +7680,58 @@ local function resolve_lc_prediction(entity_index)
         end
     end
     
+    -- === HITBOX MATRIX INTEGRATION FOR LC PREDICTION ===
+    -- Интеграция системы матрицы хитбоксов для улучшения предсказания в LC
+    local matrix_enhanced_origin = predicted_origin
+    local matrix_confidence = 0.5
+    
+    if hitbox_matrix_resolving and ui.get(hitbox_matrix_resolving) then
+        local matrix_resolution = integrate_hitbox_matrix_resolving(
+            entity_index, 
+            0, -- Базовый десинк для LC
+            math_max(0.5, 1.0 - choke * 0.5), -- Базовая уверенность
+            0 -- Голова по умолчанию
+        )
+        
+        if matrix_resolution and matrix_resolution.matrix_analysis then
+            -- Применяем коррекцию от матрицы хитбоксов к предсказанной позиции
+            local matrix_correction = matrix_resolution.desync
+            local correction_factor = math.min(0.4, matrix_resolution.confidence * 0.6)
+            
+            if matrix_correction > 0 then
+                -- Корректируем позицию на основе анализа матрицы хитбоксов
+                matrix_enhanced_origin = {
+                    x = predicted_origin.x + (matrix_correction * correction_factor),
+                    y = predicted_origin.y + (matrix_correction * correction_factor),
+                    z = predicted_origin.z
+                }
+                
+                matrix_confidence = math.min(1.0, matrix_resolution.confidence + 0.1)
+                
+                -- Debug логирование для матрицы хитбоксов в LC
+                if hitbox_matrix_debug and ui.get(hitbox_matrix_debug) then
+                    debug_log(string.format(
+                        "[LC-MATRIX] Entity: %s | Matrix Correction: %.2f | Confidence: %.2f",
+                        player_name,
+                        matrix_correction,
+                        matrix_resolution.confidence
+                    ))
+                end
+            end
+        end
+    end
+    
     local tick_dt = math.max(globals_tickinterval(), dt)
     return {
-        origin = predicted_origin,
+        origin = matrix_enhanced_origin,
         angles = current_record.angles,
         velocity = velocity,
         simulation_time = current_record.simulation_time + tick_dt,
         ticks_predicted = math.ceil(dt / globals_tickinterval()),
-        confidence = math_max(0.5, 1.0 - choke * 0.5)
+        confidence = math_max(matrix_confidence, 1.0 - choke * 0.5),
+        hitbox_matrix_enhanced = matrix_enhanced_origin ~= predicted_origin,
+        matrix_correction = matrix_enhanced_origin ~= predicted_origin and 
+            (matrix_enhanced_origin.x - predicted_origin.x) or 0
     }
 end
 
@@ -7119,11 +7781,46 @@ local function resolve_enemy_antiaim(entity_index)
     -- Get LC prediction
     local lc_prediction = resolve_lc_prediction(entity_index)
     
-    return {
+    -- === HITBOX MATRIX INTEGRATION FOR ENEMY ANTIAIM ===
+    -- Интеграция системы матрицы хитбоксов для улучшения резольвинга вражеского антиаима
+    local matrix_enhanced_resolution = {
         aisetpos_yaw = aisetpos_yaw,
         lc_prediction = lc_prediction,
-        entity_index = entity_index
-         }
+        entity_index = entity_index,
+        hitbox_matrix_enabled = hitbox_matrix_resolving and ui.get(hitbox_matrix_resolving) or false
+    }
+    
+    if hitbox_matrix_resolving and ui.get(hitbox_matrix_resolving) then
+        -- Анализируем качество резольвинга через матрицу хитбоксов
+        local matrix_analysis = integrate_hitbox_matrix_resolving(
+            entity_index, 
+            0, -- Базовый десинк
+            0.7, -- Базовая уверенность
+            0 -- Голова по умолчанию
+        )
+        
+        if matrix_analysis and matrix_analysis.matrix_analysis then
+            -- Добавляем информацию о матрице в результат
+            matrix_enhanced_resolution.hitbox_matrix_data = {
+                correction = matrix_analysis.desync,
+                confidence = matrix_analysis.confidence,
+                prediction = matrix_analysis.prediction,
+                timestamp = globals.curtime()
+            }
+            
+            -- Debug логирование для матрицы хитбоксов в Enemy Antiaim
+            if hitbox_matrix_debug and ui.get(hitbox_matrix_debug) then
+                debug_log(string.format(
+                    "[ENEMY-AA-MATRIX] Entity: %s | Matrix Analysis: %.2f | Confidence: %.2f",
+                    entity_get_player_name(entity_index) or "Unknown",
+                    matrix_analysis.desync,
+                    matrix_analysis.confidence
+                ))
+            end
+        end
+    end
+    
+    return matrix_enhanced_resolution
  end
 
 -- Enhanced Event handlers with Machine Learning Integration
