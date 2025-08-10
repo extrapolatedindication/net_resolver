@@ -123,6 +123,21 @@ local function transform_point(mat, v)
     }
 end
 
+-- Функция для создания vector3 из entity_get_prop
+local function vector3(prop_value)
+    if not prop_value then return nil end
+    
+    if type(prop_value) == "table" then
+        if prop_value[1] and prop_value[2] and prop_value[3] then
+            return {x = prop_value[1], y = prop_value[2], z = prop_value[3]}
+        elseif prop_value.x and prop_value.y and prop_value.z then
+            return {x = prop_value.x, y = prop_value.y, z = prop_value.z}
+        end
+    end
+    
+    return nil
+end
+
 local function get_hitbox_bbox_via_studio(ent, hitbox_id)
     hitbox_id = hitbox_id or 0
     local hdr = get_studiohdr_for_entity(ent)
@@ -565,20 +580,6 @@ local function resolve_via_hitbox_matrix(entity_index, hitbox_id, base_desync, c
     return corrected_desync, matrix_confidence
 end
 
--- Система предсказания хитбоксов для резольвинга
-local function predict_hitbox_for_resolving(entity_index, hitbox_id, time_ahead)
-    local entity = entity_index
-    if not entity then return nil end
-    
-    local velocity = vector3(entity_get_prop(entity, "m_vecVelocity"))
-    if not velocity then return nil end
-    
-    local prediction = predict_hitbox_via_matrix(entity_index, hitbox_id, time_ahead, velocity)
-    if not prediction then return nil end
-    
-    return prediction
-end
-
 -- Интеграция матрицы хитбоксов в основной резольвинг
 local function integrate_hitbox_matrix_resolving(entity_index, base_desync, confidence, hitbox_id)
     hitbox_id = hitbox_id or 0 -- По умолчанию используем голову
@@ -795,6 +796,20 @@ local function vector_new(x, y, z)
     else
         return {x = 0, y = 0, z = 0}
     end
+end
+
+-- Система предсказания хитбоксов для резольвинга
+local function predict_hitbox_for_resolving(entity_index, hitbox_id, time_ahead)
+    local entity = entity_index
+    if not entity then return nil end
+    
+    local velocity = vector3(entity_get_prop(entity, "m_vecVelocity"))
+    if not velocity then return nil end
+    
+    local prediction = predict_hitbox_via_matrix(entity_index, hitbox_id, time_ahead, velocity)
+    if not prediction then return nil end
+    
+    return prediction
 end
 
 -- Player data storage
