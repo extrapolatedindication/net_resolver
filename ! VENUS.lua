@@ -124,7 +124,7 @@ local function transform_point(mat, v)
 end
 
 -- Функция для создания vector3 из entity_get_prop
-local function vector3(prop_value)
+function vector3(prop_value)
     if not prop_value then return nil end
     
     if type(prop_value) == "table" then
@@ -216,7 +216,7 @@ ffi.cdef[[
 local hitbox_matrix_cache = { tick = -1, per_entity = {} }
 
 -- Получение точной матрицы хитбокса через studiohdr
-local function get_hitbox_matrix_precise(entity_index, hitbox_id)
+function get_hitbox_matrix_precise(entity_index, hitbox_id)
     if not entity_index or not hitbox_id then return nil end
     
     local entity = entity_index
@@ -259,7 +259,7 @@ local function get_hitbox_matrix_precise(entity_index, hitbox_id)
 end
 
 -- Трансформация точки через матрицу с высокой точностью
-local function transform_point_precise(matrix, point)
+function transform_point_precise(matrix, point)
     if not matrix or not point then return nil end
     
     return {
@@ -270,7 +270,7 @@ local function transform_point_precise(matrix, point)
 end
 
 -- Получение мировых координат хитбокса через матрицу
-local function get_hitbox_world_coords(entity_index, hitbox_id)
+function get_hitbox_world_coords(entity_index, hitbox_id)
     local hitbox_data = get_hitbox_matrix_precise(entity_index, hitbox_id)
     if not hitbox_data then return nil end
     
@@ -291,7 +291,7 @@ local function get_hitbox_world_coords(entity_index, hitbox_id)
 end
 
 -- Анализ десинка через матрицу хитбоксов
-local function analyze_desync_via_hitbox_matrix(entity_index, hitbox_id, angle_offset)
+function analyze_desync_via_hitbox_matrix(entity_index, hitbox_id, angle_offset)
     local hitbox_data = get_hitbox_matrix_precise(entity_index, hitbox_id)
     if not hitbox_data then return nil end
     
@@ -366,7 +366,7 @@ local function analyze_desync_via_hitbox_matrix(entity_index, hitbox_id, angle_o
 end
 
 -- Система предсказания хитбоксов через матрицу
-local function predict_hitbox_via_matrix(entity_index, hitbox_id, prediction_time, velocity)
+function predict_hitbox_via_matrix(entity_index, hitbox_id, prediction_time, velocity)
     local hitbox_data = get_hitbox_matrix_precise(entity_index, hitbox_id)
     if not hitbox_data then return nil end
     
@@ -413,7 +413,7 @@ local function predict_hitbox_via_matrix(entity_index, hitbox_id, prediction_tim
 end
 
 -- Анализ пересечений хитбоксов через матрицу
-local function analyze_hitbox_intersection_via_matrix(entity_index, hitbox_id, ray_start, ray_end)
+function analyze_hitbox_intersection_via_matrix(entity_index, hitbox_id, ray_start, ray_end)
     local hitbox_data = get_hitbox_matrix_precise(entity_index, hitbox_id)
     if not hitbox_data then return nil end
     
@@ -494,7 +494,7 @@ local function analyze_hitbox_intersection_via_matrix(entity_index, hitbox_id, r
 end
 
 -- Система валидации хитбоксов через матрицу
-local function validate_hitbox_via_matrix(entity_index, hitbox_id, angle_offsets)
+function validate_hitbox_via_matrix(entity_index, hitbox_id, angle_offsets)
     if not angle_offsets or #angle_offsets == 0 then return nil end
     
     local validation_results = {}
@@ -529,7 +529,7 @@ end
 -- Кэширование результатов анализа хитбоксов
 local hitbox_analysis_cache = { tick = -1, per_entity = {} }
 
-local function get_cached_hitbox_analysis(entity_index, hitbox_id, angle_offset)
+function get_cached_hitbox_analysis(entity_index, hitbox_id, angle_offset)
     local current_tick = globals.tickcount()
     
     if hitbox_analysis_cache.tick ~= current_tick then
@@ -556,7 +556,7 @@ end
 -- === ENHANCED HITBOX MATRIX RESOLVING SYSTEM ===
 -- Система резольвинга через матрицу хитбоксов для максимальной точности
 
-local function resolve_via_hitbox_matrix(entity_index, hitbox_id, base_desync, confidence)
+function resolve_via_hitbox_matrix(entity_index, hitbox_id, base_desync, confidence)
     local hitbox_data = get_hitbox_matrix_precise(entity_index, hitbox_id)
     if not hitbox_data then return base_desync, confidence end
     
@@ -581,7 +581,7 @@ local function resolve_via_hitbox_matrix(entity_index, hitbox_id, base_desync, c
 end
 
 -- Интеграция матрицы хитбоксов в основной резольвинг
-local function integrate_hitbox_matrix_resolving(entity_index, base_desync, confidence, hitbox_id)
+function integrate_hitbox_matrix_resolving(entity_index, base_desync, confidence, hitbox_id)
     hitbox_id = hitbox_id or 0 -- По умолчанию используем голову
     
     -- Получаем анализ через матрицу хитбоксов
@@ -799,7 +799,7 @@ local function vector_new(x, y, z)
 end
 
 -- Система предсказания хитбоксов для резольвинга
-local function predict_hitbox_for_resolving(entity_index, hitbox_id, time_ahead)
+function predict_hitbox_for_resolving(entity_index, hitbox_id, time_ahead)
     local entity = entity_index
     if not entity then return nil end
     
