@@ -204,7 +204,7 @@ local hitbox_matrix_cache = { tick = -1, per_entity = {} }
 local function get_hitbox_matrix_precise(entity_index, hitbox_id)
     if not entity_index or not hitbox_id then return nil end
     
-    local entity = entity.get_client_entity(entity_index)
+    local entity = entity_index
     if not entity then return nil end
     
     local hdr = get_studiohdr_for_entity(entity)
@@ -567,7 +567,7 @@ end
 
 -- Система предсказания хитбоксов для резольвинга
 local function predict_hitbox_for_resolving(entity_index, hitbox_id, time_ahead)
-    local entity = entity.get_client_entity(entity_index)
+    local entity = entity_index
     if not entity then return nil end
     
     local velocity = vector3(entity_get_prop(entity, "m_vecVelocity"))
@@ -614,13 +614,14 @@ local ui_get = ui.get
 -- UI Elements
 
 riptide_v5_debug = ui.new_checkbox("rage", "other", "Debug Logs")
-fake_lag_detection_enabled = ui.new_checkbox("rage", "other", "Fake Lag Detection")
 
--- === HITBOX MATRIX RESOLVING CONTROLS ===
-local hitbox_matrix_resolving = ui.new_checkbox("rage", "other", "Hitbox Matrix Resolving")
-local hitbox_matrix_debug = ui.new_checkbox("rage", "other", "Hitbox Matrix Debug")
-local hitbox_matrix_quality = ui.new_slider("rage", "other", "Matrix Quality", 1, 5, 3, true, "x")
-local hitbox_matrix_prediction = ui.new_slider("rage", "other", "Matrix Prediction", 0, 200, 100, true, "ms")
+-- === AUTOMATIC SYSTEMS ===
+-- Все системы работают автоматически без UI элементов
+local fake_lag_detection_enabled = { get = function() return true end }
+local hitbox_matrix_resolving = { get = function() return true end }
+local hitbox_matrix_debug = { get = function() return ui.get(riptide_v5_debug) end }
+local hitbox_matrix_quality = { get = function() return 4 end } -- Автоматическое качество 4x
+local hitbox_matrix_prediction = { get = function() return 120 end } -- Автоматическое предсказание 120ms
 
 -- Core variables and references
 local client_camera_angles = client.camera_angles
@@ -2137,7 +2138,7 @@ function riptide_correction(animlayers, velocity, player_state, quantum_state, n
     
     -- === FAKE LAG DETECTION FOR RIPTIDE ===
     local fake_lag_data = nil
-    if entity_index and fake_lag_detection_enabled and ui.get(fake_lag_detection_enabled) then
+            if entity_index and fake_lag_detection_enabled and fake_lag_detection_enabled.get() then
         local records = lag_records[entity_index]
         local network_info = network_channel_system and network_channel_system:get_network_info()
         if records and network_info then
@@ -2683,9 +2684,9 @@ function riptide_correction(animlayers, velocity, player_state, quantum_state, n
         (map_freestand * 0.35) +
         (correction_result.fake_lag_compensation * 0.5)
     
-    -- === HITBOX MATRIX INTEGRATION ===
-    -- Интеграция системы матрицы хитбоксов для улучшения резольвинга
-    if hitbox_matrix_resolving and ui.get(hitbox_matrix_resolving) then
+                        -- === HITBOX MATRIX INTEGRATION ===
+                    -- Интеграция системы матрицы хитбоксов для улучшения резольвинга
+                    if hitbox_matrix_resolving and hitbox_matrix_resolving.get() then
         local matrix_resolution = integrate_hitbox_matrix_resolving(
             entity_index, 
             correction_result.corrected_desync, 
@@ -2708,8 +2709,8 @@ function riptide_correction(animlayers, velocity, player_state, quantum_state, n
             correction_result.hitbox_matrix_confidence = matrix_resolution.confidence
             correction_result.hitbox_matrix_prediction = matrix_resolution.prediction
             
-            -- Debug логирование для матрицы хитбоксов
-            if hitbox_matrix_debug and ui.get(hitbox_matrix_debug) then
+                                        -- Debug логирование для матрицы хитбоксов
+                            if hitbox_matrix_debug and hitbox_matrix_debug.get() then
                 debug_log(string.format(
                     "[HITBOX-MATRIX] Correction: %.2f | Confidence: %.2f | Final Desync: %.2f",
                     matrix_correction,
@@ -5492,7 +5493,7 @@ local function get_best_backtrack_record(entity_index)
     
     -- === FAKE LAG DETECTION FOR BACKTRACK ===
     local fake_lag_analysis = nil
-    if fake_lag_detection_enabled and ui.get(fake_lag_detection_enabled) then
+    if fake_lag_detection_enabled and fake_lag_detection_enabled.get() then
         fake_lag_analysis = detect_fake_lag_manipulation(entity_index, records, network_info)
     else
         fake_lag_analysis = { is_fake_lagging = false, confidence = 0, manipulation_type = "none" }
@@ -5589,8 +5590,8 @@ local function get_best_backtrack_record(entity_index)
         fake_lag_detected = fake_lag_analysis and fake_lag_analysis.is_fake_lagging or false,
         fake_lag_type = fake_lag_analysis and fake_lag_analysis.manipulation_type or "none",
         fake_lag_confidence = fake_lag_analysis and fake_lag_analysis.confidence or 0,
-        hitbox_matrix_enabled = hitbox_matrix_resolving and ui.get(hitbox_matrix_resolving) or false,
-        hitbox_matrix_quality = hitbox_matrix_quality and ui.get(hitbox_matrix_quality) or 3
+        hitbox_matrix_enabled = hitbox_matrix_resolving and hitbox_matrix_resolving.get() or false,
+        hitbox_matrix_quality = hitbox_matrix_quality and hitbox_matrix_quality.get() or 4
     }
     
     if validation_passed then
@@ -5601,7 +5602,7 @@ local function get_best_backtrack_record(entity_index)
         )
         
         -- Add hitbox matrix info if enabled
-        if hitbox_matrix_resolving and ui.get(hitbox_matrix_resolving) then
+        if hitbox_matrix_resolving and hitbox_matrix_resolving.get() then
             local matrix_info = ""
             if selected_record.riptide_v5_data and selected_record.riptide_v5_data.hitbox_matrix_correction then
                 matrix_info = string.format(" | Matrix: %.2f (%.2f)", 
@@ -5775,7 +5776,7 @@ local function apply_backtrack_to_target(entity_index, record)
     
     -- === HITBOX MATRIX INTEGRATION FOR BACKTRACK APPLICATION ===
     -- Интеграция системы матрицы хитбоксов для улучшения применения backtrack
-    if success and hitbox_matrix_resolving and ui.get(hitbox_matrix_resolving) then
+    if success and hitbox_matrix_resolving and hitbox_matrix_resolving.get() then
         if record.riptide_v5_data and record.riptide_v5_data.hitbox_matrix_correction then
             -- Применяем коррекцию от матрицы хитбоксов к позиции
             local matrix_correction = record.riptide_v5_data.hitbox_matrix_correction
@@ -7055,7 +7056,7 @@ local function resolve_aisetpos(entity_index)
     
     -- === ADVANCED FAKE LAG DETECTION ===
     local fake_lag_data = nil
-    if fake_lag_detection_enabled and ui.get(fake_lag_detection_enabled) then
+    if fake_lag_detection_enabled and fake_lag_detection_enabled.get() then
         fake_lag_data = detect_fake_lag_manipulation(entity_index, records, network_info)
     else
         fake_lag_data = { is_fake_lagging = false, confidence = 0, manipulation_type = "none", compensation_factor = 1.0 }
@@ -7397,7 +7398,7 @@ local function resolve_aisetpos(entity_index)
     
     -- === HITBOX MATRIX INTEGRATION FOR AISETPOS ===
     -- Интеграция системы матрицы хитбоксов для улучшения резольвинга в AISETPOS
-    if hitbox_matrix_resolving and ui.get(hitbox_matrix_resolving) then
+    if hitbox_matrix_resolving and hitbox_matrix_resolving.get() then
         local matrix_resolution = integrate_hitbox_matrix_resolving(
             entity_index, 
             base_desync, 
@@ -7427,7 +7428,7 @@ local function resolve_aisetpos(entity_index)
             }
             
             -- Debug логирование для матрицы хитбоксов в AISETPOS
-            if hitbox_matrix_debug and ui.get(hitbox_matrix_debug) then
+            if hitbox_matrix_debug and hitbox_matrix_debug.get() then
                 debug_log(string.format(
                     "[AISETPOS-MATRIX] Entity: %s | Matrix Correction: %.2f | Confidence: %.2f | Final Desync: %.2f",
                     player_name,
@@ -7685,7 +7686,7 @@ local function resolve_lc_prediction(entity_index)
     local matrix_enhanced_origin = predicted_origin
     local matrix_confidence = 0.5
     
-    if hitbox_matrix_resolving and ui.get(hitbox_matrix_resolving) then
+    if hitbox_matrix_resolving and hitbox_matrix_resolving.get() then
         local matrix_resolution = integrate_hitbox_matrix_resolving(
             entity_index, 
             0, -- Базовый десинк для LC
@@ -7709,7 +7710,7 @@ local function resolve_lc_prediction(entity_index)
                 matrix_confidence = math.min(1.0, matrix_resolution.confidence + 0.1)
                 
                 -- Debug логирование для матрицы хитбоксов в LC
-                if hitbox_matrix_debug and ui.get(hitbox_matrix_debug) then
+                if hitbox_matrix_debug and hitbox_matrix_debug.get() then
                     debug_log(string.format(
                         "[LC-MATRIX] Entity: %s | Matrix Correction: %.2f | Confidence: %.2f",
                         player_name,
@@ -7787,10 +7788,10 @@ local function resolve_enemy_antiaim(entity_index)
         aisetpos_yaw = aisetpos_yaw,
         lc_prediction = lc_prediction,
         entity_index = entity_index,
-        hitbox_matrix_enabled = hitbox_matrix_resolving and ui.get(hitbox_matrix_resolving) or false
+        hitbox_matrix_enabled = hitbox_matrix_resolving and hitbox_matrix_resolving.get() or false
     }
     
-    if hitbox_matrix_resolving and ui.get(hitbox_matrix_resolving) then
+    if hitbox_matrix_resolving and hitbox_matrix_resolving.get() then
         -- Анализируем качество резольвинга через матрицу хитбоксов
         local matrix_analysis = integrate_hitbox_matrix_resolving(
             entity_index, 
@@ -7808,8 +7809,8 @@ local function resolve_enemy_antiaim(entity_index)
                 timestamp = globals.curtime()
             }
             
-            -- Debug логирование для матрицы хитбоксов в Enemy Antiaim
-            if hitbox_matrix_debug and ui.get(hitbox_matrix_debug) then
+                            -- Debug логирование для матрицы хитбоксов в Enemy Antiaim
+                if hitbox_matrix_debug and hitbox_matrix_debug.get() then
                 debug_log(string.format(
                     "[ENEMY-AA-MATRIX] Entity: %s | Matrix Analysis: %.2f | Confidence: %.2f",
                     entity_get_player_name(entity_index) or "Unknown",
