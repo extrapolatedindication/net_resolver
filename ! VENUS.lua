@@ -1443,8 +1443,8 @@ local network_packet_history = {
 
 
 
-local function debug_log(message)
-    if not ui.get(riptide_v5_debug) then 
+function debug_log(message)
+    if not riptide_v5_debug or not ui.get(riptide_v5_debug) then 
         return 
     end
     
@@ -5988,19 +5988,6 @@ function calculate_advanced_backtrack_score(record, entity_index)
             else
                 score = score - 140
             end
-        end
-    end
-        local head_frac = best_face_visibility_enhanced(0)
-        if head_frac < 0.6 then
-            local chest_frac = best_face_visibility_enhanced(5)
-            if chest_frac > head_frac then head_frac = chest_frac end
-        end
-        if head_frac > 0.9 then
-            score = score + 220
-        elseif head_frac > 0.75 then
-            score = score + 120
-        else
-            score = score - 140
         end
     end
     
