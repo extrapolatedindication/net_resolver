@@ -73,67 +73,67 @@ ffi.cdef[[
 
 -- Resolve model header via model info if available
 local function get_studiohdr_for_entity(ent)
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[STUDIOHDR-DEBUG] Entity: %s | Starting studiohdr retrieval...", ent))
-        debug_log(string.format("[STUDIOHDR-DEBUG] Entity: %s | Entity type: %s, entity.get_model: %s, client.get_model_info: %s", ent, type(ent), tostring(entity.get_model), tostring(client.get_model_info)))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+        -- debug_log(string.format("[STUDIOHDR-DEBUG] Entity: %s | Starting studiohdr retrieval...", ent))
+        -- debug_log(string.format("[STUDIOHDR-DEBUG] Entity: %s | Entity type: %s, entity.get_model: %s, client.get_model_info: %s", ent, type(ent), tostring(entity.get_model), tostring(client.get_model_info)))
         if ent and entity.get_prop then
             local health = entity.get_prop(ent, "m_iHealth")
-            debug_log(string.format("[STUDIOHDR-DEBUG] Entity: %s | Entity health: %s", ent, tostring(health)))
+            -- debug_log(string.format("[STUDIOHDR-DEBUG] Entity: %s | Entity health: %s", ent, tostring(health)))
         end
         if ent and entity.get_client_renderable then
             local renderable = entity.get_client_renderable(ent)
-            debug_log(string.format("[STUDIOHDR-DEBUG] Entity: %s | Renderable: %s", ent, tostring(renderable)))
+            -- debug_log(string.format("[STUDIOHDR-DEBUG] Entity: %s | Renderable: %s", ent, tostring(renderable)))
         end
         if ent and entity.get_prop then
             local origin = entity.get_prop(ent, "m_vecOrigin")
             if origin then
-                debug_log(string.format("[STUDIOHDR-DEBUG] Entity: %s | Entity origin: %s", ent, tostring(origin)))
+                -- debug_log(string.format("[STUDIOHDR-DEBUG] Entity: %s | Entity origin: %s", ent, tostring(origin)))
             end
         end
     end
     
     if entity.get_model and client.get_model_info then
-        if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-            debug_log(string.format("[STUDIOHDR-DEBUG] Entity: %s | Functions available, calling entity.get_model...", ent))
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[STUDIOHDR-DEBUG] Entity: %s | Functions available, calling entity.get_model...", ent))
         end
         
         local ok, model = pcall(entity.get_model, ent)
         if ok and model then
-            if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-                debug_log(string.format("[STUDIOHDR-DEBUG] Entity: %s | Got model: %s, calling client.get_model_info...", ent, tostring(model)))
+            if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[STUDIOHDR-DEBUG] Entity: %s | Got model: %s, calling client.get_model_info...", ent, tostring(model)))
             end
             
             local ok2, info = pcall(client.get_model_info, model)
             if ok2 and info and info.studiohdr then
-                if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-                    debug_log(string.format("[STUDIOHDR-DEBUG] Entity: %s | Successfully got studiohdr: %s", ent, tostring(info.studiohdr)))
+                if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[STUDIOHDR-DEBUG] Entity: %s | Successfully got studiohdr: %s", ent, tostring(info.studiohdr)))
                     if info.studiohdr then
                         local studiohdr = ffi.cast("studiohdr_t*", info.studiohdr)
                         if studiohdr then
-                            debug_log(string.format("[STUDIOHDR-DEBUG] Entity: %s | Studiohdr details - hitboxset_index: %d", ent, studiohdr.hitboxset_index or 0))
-                            debug_log(string.format("[STUDIOHDR-DEBUG] Entity: %s | Studiohdr type: %s", ent, type(studiohdr)))
-                            debug_log(string.format("[STUDIOHDR-DEBUG] Entity: %s | Studiohdr pointer: %s", ent, tostring(studiohdr)))
+# debug_log(string.format("[STUDIOHDR-DEBUG] Entity: %s | Studiohdr details - hitboxset_index: %d", ent, studiohdr.hitboxset_index or 0))
+# debug_log(string.format("[STUDIOHDR-DEBUG] Entity: %s | Studiohdr type: %s", ent, type(studiohdr)))
+# debug_log(string.format("[STUDIOHDR-DEBUG] Entity: %s | Studiohdr pointer: %s", ent, tostring(studiohdr)))
                         end
                     end
                 end
                 local final_studiohdr = ffi.cast("studiohdr_t*", info.studiohdr)
-                if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-                    debug_log(string.format("[STUDIOHDR-DEBUG] Entity: %s | Final studiohdr cast result: %s (type: %s)", ent, tostring(final_studiohdr), type(final_studiohdr)))
+                if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[STUDIOHDR-DEBUG] Entity: %s | Final studiohdr cast result: %s (type: %s)", ent, tostring(final_studiohdr), type(final_studiohdr)))
                 end
                 return final_studiohdr
             else
-                if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-                    debug_log(string.format("[STUDIOHDR-DEBUG] Entity: %s | Failed to get model info or studiohdr: info=%s", ent, tostring(info)))
+                if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[STUDIOHDR-DEBUG] Entity: %s | Failed to get model info or studiohdr: info=%s", ent, tostring(info)))
                 end
             end
         else
-            if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-                debug_log(string.format("[STUDIOHDR-DEBUG] Entity: %s | Failed to get model: ok=%s, model=%s", ent, tostring(ok), tostring(model)))
+            if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[STUDIOHDR-DEBUG] Entity: %s | Failed to get model: ok=%s, model=%s", ent, tostring(ok), tostring(model)))
             end
         end
     else
-        if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-            debug_log(string.format("[STUDIOHDR-DEBUG] Entity: %s | entity.get_model or client.get_model_info not available: entity.get_model=%s, client.get_model_info=%s", ent, tostring(entity.get_model), tostring(client.get_model_info)))
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[STUDIOHDR-DEBUG] Entity: %s | entity.get_model or client.get_model_info not available: entity.get_model=%s, client.get_model_info=%s", ent, tostring(entity.get_model), tostring(client.get_model_info)))
         end
     end
     return nil
@@ -143,35 +143,35 @@ end
 local bones_cache = { tick = -1, per_entity = {} }
 
 local function try_setup_bones_vtable(ent, out_bones, max_bones, bone_mask, time)
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[VTABLE-DEBUG] Entity: %s | Attempting to get renderable...", ent))
-        debug_log(string.format("[VTABLE-DEBUG] Entity: %s | Entity type: %s, entity.get_renderable: %s", ent, type(ent), tostring(entity.get_renderable)))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[VTABLE-DEBUG] Entity: %s | Attempting to get renderable...", ent))
+# debug_log(string.format("[VTABLE-DEBUG] Entity: %s | Entity type: %s, entity.get_renderable: %s", ent, type(ent), tostring(entity.get_renderable)))
     end
     
     local ok, renderable = pcall(function()
         return entity.get_renderable and entity.get_renderable(ent) or nil
     end)
     if not ok or not renderable then 
-        if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-            debug_log(string.format("[VTABLE-DEBUG] Entity: %s | Failed to get renderable: %s", ent, tostring(renderable)))
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[VTABLE-DEBUG] Entity: %s | Failed to get renderable: %s", ent, tostring(renderable)))
         end
         return false 
     end
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[VTABLE-DEBUG] Entity: %s | Got renderable: %s, checking vtable functions...", ent, tostring(renderable)))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[VTABLE-DEBUG] Entity: %s | Got renderable: %s, checking vtable functions...", ent, tostring(renderable)))
     end
     
     local vtbl = ffi.cast("void***", renderable)[0]
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[VTABLE-DEBUG] Entity: %s | Got vtable: %s, checking indices 13-18...", ent, tostring(vtbl)))
-        debug_log(string.format("[VTABLE-DEBUG] Entity: %s | Vtable pointer: %s, renderable: %s", ent, tostring(vtbl), tostring(renderable)))
-        debug_log(string.format("[VTABLE-DEBUG] Entity: %s | Vtable type: %s", ent, type(vtbl)))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[VTABLE-DEBUG] Entity: %s | Got vtable: %s, checking indices 13-18...", ent, tostring(vtbl)))
+# debug_log(string.format("[VTABLE-DEBUG] Entity: %s | Vtable pointer: %s, renderable: %s", ent, tostring(vtbl), tostring(renderable)))
+# debug_log(string.format("[VTABLE-DEBUG] Entity: %s | Vtable type: %s", ent, type(vtbl)))
         if vtbl then
-            debug_log(string.format("[VTABLE-DEBUG] Entity: %s | Vtable[0] type: %s", ent, type(vtbl[0])))
+# debug_log(string.format("[VTABLE-DEBUG] Entity: %s | Vtable[0] type: %s", ent, type(vtbl[0])))
             for i = 0, 5 do
                 if vtbl[i] then
-                    debug_log(string.format("[VTABLE-DEBUG] Entity: %s | Vtable[%d]: %s", ent, i, tostring(vtbl[i])))
+# debug_log(string.format("[VTABLE-DEBUG] Entity: %s | Vtable[%d]: %s", ent, i, tostring(vtbl[i])))
                 end
             end
         end
@@ -182,73 +182,73 @@ local function try_setup_bones_vtable(ent, out_bones, max_bones, bone_mask, time
             return ffi.cast("bool(__thiscall*)(void*, matrix3x4_t*, int, int, float)", vtbl[idx])
         end)
         if fn_ok and fn ~= nil then
-            if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-                debug_log(string.format("[VTABLE-DEBUG] Entity: %s | Found vtable function at index %d: %s, calling...", ent, idx, tostring(fn)))
+            if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[VTABLE-DEBUG] Entity: %s | Found vtable function at index %d: %s, calling...", ent, idx, tostring(fn)))
             end
             
             local ok_call, res = pcall(function()
                 return fn(renderable, out_bones, max_bones, bone_mask, time)
             end)
             if ok_call and res then 
-                if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-                    debug_log(string.format("[VTABLE-DEBUG] Entity: %s | Successfully called vtable function at index %d, result: %s", ent, idx, tostring(res)))
-                    debug_log(string.format("[VTABLE-DEBUG] Entity: %s | Vtable call parameters - max_bones: %d, bone_mask: %d, time: %.2f", ent, max_bones, bone_mask, time))
+                if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[VTABLE-DEBUG] Entity: %s | Successfully called vtable function at index %d, result: %s", ent, idx, tostring(res)))
+# debug_log(string.format("[VTABLE-DEBUG] Entity: %s | Vtable call parameters - max_bones: %d, bone_mask: %d, time: %.2f", ent, max_bones, bone_mask, time))
                 end
                 return true 
             else
-                if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-                    debug_log(string.format("[VTABLE-DEBUG] Entity: %s | Failed to call vtable function at index %d, error: %s", ent, idx, tostring(res)))
+                if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[VTABLE-DEBUG] Entity: %s | Failed to call vtable function at index %d, error: %s", ent, idx, tostring(res)))
                 end
             end
         else
-            if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-                debug_log(string.format("[VTABLE-DEBUG] Entity: %s | Failed to get vtable function at index %d: %s", ent, idx, tostring(fn)))
+            if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[VTABLE-DEBUG] Entity: %s | Failed to get vtable function at index %d: %s", ent, idx, tostring(fn)))
             end
         end
     end
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[VTABLE-DEBUG] Entity: %s | No working vtable function found", ent))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[VTABLE-DEBUG] Entity: %s | No working vtable function found", ent))
     end
     return false
 end
 
 local function get_bones_cached(ent)
     local cur_tick = globals.tickcount()
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[BONES-DEBUG] Entity: %s | Current tick: %d, cache tick: %d", ent, cur_tick, bones_cache.tick))
-        debug_log(string.format("[BONES-DEBUG] Entity: %s | Entity type: %s, entity.get_renderable: %s", ent, type(ent), tostring(entity.get_renderable)))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[BONES-DEBUG] Entity: %s | Current tick: %d, cache tick: %d", ent, cur_tick, bones_cache.tick))
+# debug_log(string.format("[BONES-DEBUG] Entity: %s | Entity type: %s, entity.get_renderable: %s", ent, type(ent), tostring(entity.get_renderable)))
     end
     
     if bones_cache.tick ~= cur_tick then
         bones_cache.tick = cur_tick
         bones_cache.per_entity = {}
-        if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-            debug_log(string.format("[BONES-DEBUG] Entity: %s | Cache cleared for new tick", ent))
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[BONES-DEBUG] Entity: %s | Cache cleared for new tick", ent))
         end
     end
     
     if bones_cache.per_entity[ent] then 
-        if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-            debug_log(string.format("[BONES-DEBUG] Entity: %s | Returning cached bones", ent))
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[BONES-DEBUG] Entity: %s | Returning cached bones", ent))
         end
         return bones_cache.per_entity[ent] 
     end
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[BONES-DEBUG] Entity: %s | Attempting to get bones via vtable...", ent))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[BONES-DEBUG] Entity: %s | Attempting to get bones via vtable...", ent))
     end
     
     local bones = ffi.new("matrix3x4_t[128]")
     local ok = try_setup_bones_vtable(ent, bones, 128, 0x100, globals.curtime())
     if ok then
-        if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-            debug_log(string.format("[BONES-DEBUG] Entity: %s | Successfully got bones via vtable, caching result", ent))
-            debug_log(string.format("[BONES-DEBUG] Entity: %s | Bones array type: %s", ent, type(bones)))
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[BONES-DEBUG] Entity: %s | Successfully got bones via vtable, caching result", ent))
+# debug_log(string.format("[BONES-DEBUG] Entity: %s | Bones array type: %s", ent, type(bones)))
             if type(bones) == "cdata" then
-                debug_log(string.format("[BONES-DEBUG] Entity: %s | Bones cdata size: %d", ent, ffi.sizeof(bones)))
+# debug_log(string.format("[BONES-DEBUG] Entity: %s | Bones cdata size: %d", ent, ffi.sizeof(bones)))
                 if bones[0] then
-                    debug_log(string.format("[BONES-DEBUG] Entity: %s | First bone matrix translation: (%.6f,%.6f,%.6f)", ent, 
+# debug_log(string.format("[BONES-DEBUG] Entity: %s | First bone matrix translation: (%.6f,%.6f,%.6f)", ent, 
                         bones[0].m[0][3] or 0, bones[0].m[1][3] or 0, bones[0].m[2][3] or 0))
                 end
             end
@@ -256,9 +256,9 @@ local function get_bones_cached(ent)
         bones_cache.per_entity[ent] = bones
         return bones
     else
-        if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-            debug_log(string.format("[BONES-DEBUG] Entity: %s | Failed to get bones via vtable", ent))
-            debug_log(string.format("[BONES-DEBUG] Entity: %s | Vtable call parameters: max_bones=128, bone_mask=0x100, time=%.2f", ent, globals.curtime()))
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[BONES-DEBUG] Entity: %s | Failed to get bones via vtable", ent))
+# debug_log(string.format("[BONES-DEBUG] Entity: %s | Vtable call parameters: max_bones=128, bone_mask=0x100, time=%.2f", ent, globals.curtime()))
         end
     end
     return nil
@@ -306,70 +306,70 @@ end
 
 local function get_hitbox_bbox_via_studio(ent, hitbox_id)
     hitbox_id = hitbox_id or 0
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[STUDIO-BBOX-DEBUG] Entity: %s | Hitbox: %d | Starting studio bbox retrieval...", ent, hitbox_id))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[STUDIO-BBOX-DEBUG] Entity: %s | Hitbox: %d | Starting studio bbox retrieval...", ent, hitbox_id))
     end
     
     local hdr = get_studiohdr_for_entity(ent)
     if not hdr then 
-        if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-            debug_log(string.format("[STUDIO-BBOX-DEBUG] Entity: %s | Hitbox: %d | Failed to get studiohdr", ent, hitbox_id))
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[STUDIO-BBOX-DEBUG] Entity: %s | Hitbox: %d | Failed to get studiohdr", ent, hitbox_id))
         end
         return nil 
     end
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[STUDIO-BBOX-DEBUG] Entity: %s | Hitbox: %d | Successfully got studiohdr: %s", ent, hitbox_id, tostring(hdr)))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[STUDIO-BBOX-DEBUG] Entity: %s | Hitbox: %d | Successfully got studiohdr: %s", ent, hitbox_id, tostring(hdr)))
         if hdr then
-            debug_log(string.format("[STUDIO-BBOX-DEBUG] Entity: %s | Hitbox: %d | Studiohdr type: %s", ent, hitbox_id, type(hdr)))
+# debug_log(string.format("[STUDIO-BBOX-DEBUG] Entity: %s | Hitbox: %d | Studiohdr type: %s", ent, hitbox_id, type(hdr)))
         end
     end
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[STUDIO-BBOX-DEBUG] Entity: %s | Hitbox: %d | Got studiohdr, getting hitbox set...", ent, hitbox_id))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[STUDIO-BBOX-DEBUG] Entity: %s | Hitbox: %d | Got studiohdr, getting hitbox set...", ent, hitbox_id))
     end
     
     local set = ffi.cast("mstudiohitboxset_t*", ffi.cast("uint8_t*", hdr) + hdr.hitboxset_index)
     if not set or set.num_hitboxes <= hitbox_id then 
-        if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-            debug_log(string.format("[STUDIO-BBOX-DEBUG] Entity: %s | Hitbox: %d | Failed to get hitbox set: set=%s, num_hitboxes=%d", ent, hitbox_id, tostring(set), set and set.num_hitboxes or "nil"))
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[STUDIO-BBOX-DEBUG] Entity: %s | Hitbox: %d | Failed to get hitbox set: set=%s, num_hitboxes=%d", ent, hitbox_id, tostring(set), set and set.num_hitboxes or "nil"))
         end
         return nil 
     end
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[STUDIO-BBOX-DEBUG] Entity: %s | Hitbox: %d | Got hitbox set, getting specific bbox...", ent, hitbox_id))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[STUDIO-BBOX-DEBUG] Entity: %s | Hitbox: %d | Got hitbox set, getting specific bbox...", ent, hitbox_id))
     end
     
     local bbox = ffi.cast("mstudiobbox_t*", ffi.cast("uint8_t*", set) + set.hitbox_index + hitbox_id * ffi.sizeof("mstudiobbox_t"))
     if not bbox then 
-        if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-            debug_log(string.format("[STUDIO-BBOX-DEBUG] Entity: %s | Hitbox: %d | Failed to get specific bbox", ent, hitbox_id))
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[STUDIO-BBOX-DEBUG] Entity: %s | Hitbox: %d | Failed to get specific bbox", ent, hitbox_id))
         end
         return nil 
     end
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[STUDIO-BBOX-DEBUG] Entity: %s | Hitbox: %d | Got bbox, getting bones...", ent, hitbox_id))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[STUDIO-BBOX-DEBUG] Entity: %s | Hitbox: %d | Got bbox, getting bones...", ent, hitbox_id))
     end
     
     local bones = get_bones_cached and get_bones_cached(ent) or nil
     if not bones then 
-        if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-            debug_log(string.format("[STUDIO-BBOX-DEBUG] Entity: %s | Hitbox: %d | Failed to get bones", ent, hitbox_id))
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[STUDIO-BBOX-DEBUG] Entity: %s | Hitbox: %d | Failed to get bones", ent, hitbox_id))
         end
         return nil 
     end
     
     local bone = bbox.m_iBone or 0
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[STUDIO-BBOX-DEBUG] Entity: %s | Hitbox: %d | Bone index: %d", ent, hitbox_id, bone))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[STUDIO-BBOX-DEBUG] Entity: %s | Hitbox: %d | Bone index: %d", ent, hitbox_id, bone))
     end
     
     local mat = bones[bone]
     if not mat then 
-        if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-            debug_log(string.format("[STUDIO-BBOX-DEBUG] Entity: %s | Hitbox: %d | Failed to get bone matrix for bone %d", ent, hitbox_id, bone))
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[STUDIO-BBOX-DEBUG] Entity: %s | Hitbox: %d | Failed to get bone matrix for bone %d", ent, hitbox_id, bone))
         end
         return nil 
     end
@@ -378,8 +378,8 @@ local function get_hitbox_bbox_via_studio(ent, hitbox_id)
     local maxs = {x = bbox.bbmax[0], y = bbox.bbmax[1], z = bbox.bbmax[2]}
     local center_local = {x = (mins.x + maxs.x)/2, y = (mins.y + maxs.y)/2, z = (mins.z + maxs.z)/2}
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[STUDIO-BBOX-DEBUG] Entity: %s | Hitbox: %d | Local coords - mins:(%.2f,%.2f,%.2f) maxs:(%.2f,%.2f,%.2f) center:(%.2f,%.2f,%.2f)", 
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[STUDIO-BBOX-DEBUG] Entity: %s | Hitbox: %d | Local coords - mins:(%.2f,%.2f,%.2f) maxs:(%.2f,%.2f,%.2f) center:(%.2f,%.2f,%.2f)", 
             ent, hitbox_id, mins.x or 0, mins.y or 0, mins.z or 0, maxs.x or 0, maxs.y or 0, maxs.z or 0, center_local.x or 0, center_local.y or 0, center_local.z or 0))
     end
     
@@ -389,8 +389,8 @@ local function get_hitbox_bbox_via_studio(ent, hitbox_id)
         maxs = transform_point(mat, maxs)
     }
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[STUDIO-BBOX-DEBUG] Entity: %s | Hitbox: %d | Successfully created result", ent, hitbox_id))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[STUDIO-BBOX-DEBUG] Entity: %s | Hitbox: %d | Successfully created result", ent, hitbox_id))
     end
     
     return result
@@ -436,130 +436,130 @@ local hitbox_matrix_cache = { tick = -1, per_entity = {} }
 -- Получение точной матрицы хитбокса через studiohdr
 function get_hitbox_matrix_precise(entity_index, hitbox_id)
     if not entity_index or not hitbox_id then 
-        if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-            debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Invalid parameters", entity_index, hitbox_id))
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Invalid parameters", entity_index, hitbox_id))
         end
         return nil 
     end
     
     local entity = entity_index
     if not entity then 
-        if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-            debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Entity is nil", entity_index, hitbox_id))
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Entity is nil", entity_index, hitbox_id))
         end
         return nil 
     end
     
     -- Additional entity validation
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Entity validation - type: %s, alive: %s", entity_index, hitbox_id, type(entity), tostring(entity.is_alive and entity.is_alive(entity) or "unknown")))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Entity validation - type: %s, alive: %s", entity_index, hitbox_id, type(entity), tostring(entity.is_alive and entity.is_alive(entity) or "unknown")))
         if entity.get_prop then
             local health = entity.get_prop(entity, "m_iHealth")
-            debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Entity health: %s", entity_index, hitbox_id, tostring(health)))
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Entity health: %s", entity_index, hitbox_id, tostring(health)))
         end
     end
     
     -- Debug: проверяем доступность entity функций
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Starting hitbox matrix retrieval...", entity_index, hitbox_id))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Starting hitbox matrix retrieval...", entity_index, hitbox_id))
     end
     
     local hdr = get_studiohdr_for_entity(entity)
     if not hdr then 
-        if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-            debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Failed to get studiohdr", entity_index, hitbox_id))
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Failed to get studiohdr", entity_index, hitbox_id))
         end
         return nil 
     end
     
     -- Debug: проверяем хитбокс сет
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Got studiohdr, checking hitbox set...", entity_index, hitbox_id))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Got studiohdr, checking hitbox set...", entity_index, hitbox_id))
     end
     
     -- Получаем хитбокс сет
     local hitbox_set = ffi.cast("mstudiohitboxset_t*", ffi.cast("uint8_t*", hdr) + hdr.hitboxset_index)
     if not hitbox_set or hitbox_set.num_hitboxes <= hitbox_id then 
-        if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-            debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Failed to get hitbox set or invalid hitbox_id", entity_index, hitbox_id))
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Failed to get hitbox set or invalid hitbox_id", entity_index, hitbox_id))
         end
         return nil 
     end
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Successfully got hitbox set: %s", entity_index, hitbox_id, tostring(hitbox_set)))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Successfully got hitbox set: %s", entity_index, hitbox_id, tostring(hitbox_set)))
         if hitbox_set then
-            debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Hitbox set type: %s", entity_index, hitbox_id, type(hitbox_set)))
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Hitbox set type: %s", entity_index, hitbox_id, type(hitbox_set)))
                     if hitbox_set.num_hitboxes then
-            debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Hitbox set num_hitboxes: %d", entity_index, hitbox_id, hitbox_set.num_hitboxes))
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Hitbox set num_hitboxes: %d", entity_index, hitbox_id, hitbox_set.num_hitboxes))
         end
         if hitbox_set.hitbox_index then
-            debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Hitbox set hitbox_index: %d", entity_index, hitbox_id, hitbox_set.hitbox_index))
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Hitbox set hitbox_index: %d", entity_index, hitbox_id, hitbox_set.hitbox_index))
         end
-        debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Hitbox set type: %s", entity_index, hitbox_id, type(hitbox_set)))
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Hitbox set type: %s", entity_index, hitbox_id, type(hitbox_set)))
         if hitbox_set.hitbox then
-            debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Hitbox set hitbox type: %s", entity_index, hitbox_id, type(hitbox_set.hitbox)))
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Hitbox set hitbox type: %s", entity_index, hitbox_id, type(hitbox_set.hitbox)))
         end
         end
     end
     
     -- Debug: проверяем конкретный хитбокс
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Got hitbox set, checking specific hitbox...", entity_index, hitbox_id))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Got hitbox set, checking specific hitbox...", entity_index, hitbox_id))
     end
     
     -- Получаем конкретный хитбокс
     local bbox = ffi.cast("mstudiobbox_t*", ffi.cast("uint8_t*", hitbox_set) + hitbox_set.hitbox_index + hitbox_id * ffi.sizeof("mstudiobbox_t"))
     if not bbox then 
-        if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-            debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Failed to get specific hitbox", entity_index, hitbox_id))
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Failed to get specific hitbox", entity_index, hitbox_id))
         end
         return nil 
     end
     
     -- Debug: проверяем кости
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Got hitbox, checking bones...", entity_index, hitbox_id))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Got hitbox, checking bones...", entity_index, hitbox_id))
     end
     
     -- Получаем кости
     local bones = get_bones_cached(entity)
     if not bones then 
-        if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-            debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Failed to get bones", entity_index, hitbox_id))
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Failed to get bones", entity_index, hitbox_id))
         end
         return nil 
     end
     
     local bone_index = bbox.bone
     if bone_index < 0 or bone_index >= 128 then 
-        if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-            debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Invalid bone index: %d", entity_index, hitbox_id, bone_index))
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Invalid bone index: %d", entity_index, hitbox_id, bone_index))
         end
         return nil 
     end
     
     local bone_matrix = bones[bone_index]
     if not bone_matrix then 
-        if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-            debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Failed to get bone matrix for bone %d", entity_index, hitbox_id, bone_index))
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Failed to get bone matrix for bone %d", entity_index, hitbox_id, bone_index))
         end
         return nil 
     end
     
     -- Debug: успешно получили матрицу
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Successfully got hitbox matrix", entity_index, hitbox_id))
-        debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Matrix details - bone_index: %d, radius: %.2f", entity_index, hitbox_id, bone_index, bbox.radius or 0))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Successfully got hitbox matrix", entity_index, hitbox_id))
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Matrix details - bone_index: %d, radius: %.2f", entity_index, hitbox_id, bone_index, bbox.radius or 0))
         if bone_matrix then
-            debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Bone matrix translation: (%.2f,%.2f,%.2f)", entity_index, hitbox_id, 
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Bone matrix translation: (%.2f,%.2f,%.2f)", entity_index, hitbox_id, 
                 bone_matrix.m[0][3] or 0, bone_matrix.m[1][3] or 0, bone_matrix.m[2][3] or 0))
             -- Additional matrix debugging
-            debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Matrix rotation - [0][0]=%.3f, [0][1]=%.3f, [0][2]=%.3f", entity_index, hitbox_id, 
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Matrix rotation - [0][0]=%.3f, [0][1]=%.3f, [0][2]=%.3f", entity_index, hitbox_id, 
                 bone_matrix.m[0][0] or 0, bone_matrix.m[0][1] or 0, bone_matrix.m[0][2] or 0))
-            debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Matrix rotation - [1][0]=%.3f, [1][1]=%.3f, [1][2]=%.3f", entity_index, hitbox_id, 
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Matrix rotation - [1][0]=%.3f, [1][1]=%.3f, [1][2]=%.3f", entity_index, hitbox_id, 
                 bone_matrix.m[1][0] or 0, bone_matrix.m[1][1] or 0, bone_matrix.m[1][2] or 0))
-            debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Matrix rotation - [2][0]=%.3f, [2][1]=%.3f, [2][2]=%.3f", entity_index, hitbox_id, 
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Matrix rotation - [2][0]=%.3f, [2][1]=%.3f, [2][2]=%.3f", entity_index, hitbox_id, 
                 bone_matrix.m[2][0] or 0, bone_matrix.m[2][1] or 0, bone_matrix.m[2][2] or 0))
         end
     end
@@ -582,8 +582,8 @@ function get_hitbox_matrix_precise(entity_index, hitbox_id)
         z = bbox.bbmax[2] or 0 
     }
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Local coords - center:(%.2f,%.2f,%.2f) mins:(%.2f,%.2f,%.2f) maxs:(%.2f,%.2f,%.2f)", 
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Local coords - center:(%.2f,%.2f,%.2f) mins:(%.2f,%.2f,%.2f) maxs:(%.2f,%.2f,%.2f)", 
             entity_index, hitbox_id, 
             center_local.x or 0, center_local.y or 0, center_local.z or 0,
             mins_local.x or 0, mins_local.y or 0, mins_local.z or 0,
@@ -600,15 +600,15 @@ function get_hitbox_matrix_precise(entity_index, hitbox_id)
         radius = bbox.radius or 0
     }
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Final result object:", entity_index, hitbox_id))
-        debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   matrix: %s (type: %s)", entity_index, hitbox_id, tostring(result.matrix), type(result.matrix)))
-        debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   bbox: %s (type: %s)", entity_index, hitbox_id, tostring(result.bbox), type(result.bbox)))
-        debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   bone_index: %s (type: %s)", entity_index, hitbox_id, tostring(result.bone_index), type(result.bone_index)))
-        debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   center_local: %s (type: %s)", entity_index, hitbox_id, tostring(result.center_local), type(result.center_local)))
-        debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   mins_local: %s (type: %s)", entity_index, hitbox_id, tostring(result.mins_local), type(result.mins_local)))
-        debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   maxs_local: %s (type: %s)", entity_index, hitbox_id, tostring(result.maxs_local), type(result.maxs_local)))
-        debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   radius: %s (type: %s)", entity_index, hitbox_id, tostring(result.radius), type(result.radius)))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Final result object:", entity_index, hitbox_id))
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   matrix: %s (type: %s)", entity_index, hitbox_id, tostring(result.matrix), type(result.matrix)))
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   bbox: %s (type: %s)", entity_index, hitbox_id, tostring(result.bbox), type(result.bbox)))
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   bone_index: %s (type: %s)", entity_index, hitbox_id, tostring(result.bone_index), type(result.bone_index)))
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   center_local: %s (type: %s)", entity_index, hitbox_id, tostring(result.center_local), type(result.center_local)))
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   mins_local: %s (type: %s)", entity_index, hitbox_id, tostring(result.mins_local), type(result.mins_local)))
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   maxs_local: %s (type: %s)", entity_index, hitbox_id, tostring(result.maxs_local), type(result.maxs_local)))
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   radius: %s (type: %s)", entity_index, hitbox_id, tostring(result.radius), type(result.radius)))
     end
     
     return result
@@ -617,36 +617,36 @@ end
 -- Трансформация точки через матрицу с высокой точностью
 function transform_point_precise(matrix, point)
     if not matrix or not point then 
-                    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-            debug_log(string.format("[TRANSFORM-DEBUG] transform_point_precise: matrix=%s, point=%s", tostring(matrix), tostring(point)))
+                    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[TRANSFORM-DEBUG] transform_point_precise: matrix=%s, point=%s", tostring(matrix), tostring(point)))
             if matrix then
-                debug_log(string.format("[TRANSFORM-DEBUG] transform_point_precise: matrix type: %s", type(matrix)))
+# debug_log(string.format("[TRANSFORM-DEBUG] transform_point_precise: matrix type: %s", type(matrix)))
                 if matrix.m then
-                    debug_log(string.format("[TRANSFORM-DEBUG] transform_point_precise: matrix.m type: %s", type(matrix.m)))
+# debug_log(string.format("[TRANSFORM-DEBUG] transform_point_precise: matrix.m type: %s", type(matrix.m)))
                     if matrix.m[0] then
-                        debug_log(string.format("[TRANSFORM-DEBUG] transform_point_precise: matrix.m[0] type: %s", type(matrix.m[0])))
+# debug_log(string.format("[TRANSFORM-DEBUG] transform_point_precise: matrix.m[0] type: %s", type(matrix.m[0])))
                     end
                 end
             end
             if point then
-                debug_log(string.format("[TRANSFORM-DEBUG] transform_point_precise: point type: %s", type(point)))
+# debug_log(string.format("[TRANSFORM-DEBUG] transform_point_precise: point type: %s", type(point)))
                 if point.x then
-                    debug_log(string.format("[TRANSFORM-DEBUG] transform_point_precise: point.x type: %s", type(point.x)))
-                    debug_log(string.format("[TRANSFORM-DEBUG] transform_point_precise: point values: x=%.6f, y=%.6f, z=%.6f", point.x or 0, point.y or 0, point.z or 0))
+# debug_log(string.format("[TRANSFORM-DEBUG] transform_point_precise: point.x type: %s", type(point.x)))
+# debug_log(string.format("[TRANSFORM-DEBUG] transform_point_precise: point values: x=%.6f, y=%.6f, z=%.6f", point.x or 0, point.y or 0, point.z or 0))
                 end
             end
         end
         return nil 
     end
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[TRANSFORM-DEBUG] transform_point_precise: matrix[0][0]=%.6f, matrix[0][1]=%.6f, matrix[0][2]=%.6f, matrix[0][3]=%.6f", 
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[TRANSFORM-DEBUG] transform_point_precise: matrix[0][0]=%.6f, matrix[0][1]=%.6f, matrix[0][2]=%.6f, matrix[0][3]=%.6f", 
             matrix.m[0][0] or 0, matrix.m[0][1] or 0, matrix.m[0][2] or 0, matrix.m[0][3] or 0))
-        debug_log(string.format("[TRANSFORM-DEBUG] transform_point_precise: matrix[1][0]=%.6f, matrix[1][1]=%.6f, matrix[1][2]=%.6f, matrix[1][3]=%.6f", 
+# debug_log(string.format("[TRANSFORM-DEBUG] transform_point_precise: matrix[1][0]=%.6f, matrix[1][1]=%.6f, matrix[1][2]=%.6f, matrix[1][3]=%.6f", 
             matrix.m[1][0] or 0, matrix.m[1][1] or 0, matrix.m[1][2] or 0, matrix.m[1][3] or 0))
-        debug_log(string.format("[TRANSFORM-DEBUG] transform_point_precise: matrix[2][0]=%.6f, matrix[2][1]=%.6f, matrix[2][2]=%.6f, matrix[2][3]=%.6f", 
+# debug_log(string.format("[TRANSFORM-DEBUG] transform_point_precise: matrix[2][0]=%.6f, matrix[2][1]=%.6f, matrix[2][2]=%.6f, matrix[2][3]=%.6f", 
             matrix.m[2][0] or 0, matrix.m[2][1] or 0, matrix.m[2][2] or 0, matrix.m[2][3] or 0))
-        debug_log(string.format("[TRANSFORM-DEBUG] transform_point_precise: point x=%.6f, y=%.6f, z=%.6f", point.x or 0, point.y or 0, point.z or 0))
+# debug_log(string.format("[TRANSFORM-DEBUG] transform_point_precise: point x=%.6f, y=%.6f, z=%.6f", point.x or 0, point.y or 0, point.z or 0))
     end
     
     local result = {
@@ -655,15 +655,15 @@ function transform_point_precise(matrix, point)
         z = (matrix.m[2][0] or 0) * (point.x or 0) + (matrix.m[2][1] or 0) * (point.y or 0) + (matrix.m[2][2] or 0) * (point.z or 0) + (matrix.m[2][3] or 0)
     }
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[TRANSFORM-DEBUG] transform_point_precise: calculation details:"))
-        debug_log(string.format("[TRANSFORM-DEBUG] transform_point_precise: x = %.6f*%.6f + %.6f*%.6f + %.6f*%.6f + %.6f = %.6f", 
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[TRANSFORM-DEBUG] transform_point_precise: calculation details:"))
+# debug_log(string.format("[TRANSFORM-DEBUG] transform_point_precise: x = %.6f*%.6f + %.6f*%.6f + %.6f*%.6f + %.6f = %.6f", 
             matrix.m[0][0] or 0, point.x or 0, matrix.m[0][1] or 0, point.y or 0, matrix.m[0][2] or 0, point.z or 0, matrix.m[0][3] or 0, result.x or 0))
-        debug_log(string.format("[TRANSFORM-DEBUG] transform_point_precise: y = %.6f*%.6f + %.6f*%.6f + %.6f*%.6f + %.6f = %.6f", 
+# debug_log(string.format("[TRANSFORM-DEBUG] transform_point_precise: y = %.6f*%.6f + %.6f*%.6f + %.6f*%.6f + %.6f = %.6f", 
             matrix.m[1][0] or 0, point.x or 0, matrix.m[1][1] or 0, point.y or 0, matrix.m[1][2] or 0, point.z or 0, matrix.m[1][3] or 0, result.y or 0))
-        debug_log(string.format("[TRANSFORM-DEBUG] transform_point_precise: z = %.6f*%.6f + %.6f*%.6f + %.6f*%.6f + %.6f = %.6f", 
+# debug_log(string.format("[TRANSFORM-DEBUG] transform_point_precise: z = %.6f*%.6f + %.6f*%.6f + %.6f*%.6f + %.6f = %.6f", 
             matrix.m[2][0] or 0, point.x or 0, matrix.m[2][1] or 0, point.y or 0, matrix.m[2][2] or 0, point.z or 0, matrix.m[2][3] or 0, result.z or 0))
-        debug_log(string.format("[TRANSFORM-DEBUG] transform_point_precise: input=(%.6f,%.6f,%.6f) -> output=(%.6f,%.6f,%.6f)", 
+# debug_log(string.format("[TRANSFORM-DEBUG] transform_point_precise: input=(%.6f,%.6f,%.6f) -> output=(%.6f,%.6f,%.6f)", 
             point.x or 0, point.y or 0, point.z or 0, 
             result.x or 0, result.y or 0, result.z or 0))
     end
@@ -673,26 +673,26 @@ end
 
 -- Получение мировых координат хитбокса через матрицу
 function get_hitbox_world_coords(entity_index, hitbox_id)
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[WORLD-COORDS-DEBUG] Entity: %s | Hitbox: %d | Getting world coordinates...", entity_index, hitbox_id))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[WORLD-COORDS-DEBUG] Entity: %s | Hitbox: %d | Getting world coordinates...", entity_index, hitbox_id))
     end
     
     local hitbox_data = get_hitbox_matrix_precise(entity_index, hitbox_id)
     if not hitbox_data then 
-        if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-            debug_log(string.format("[WORLD-COORDS-DEBUG] Entity: %s | Hitbox: %d | Failed to get hitbox data", entity_index, hitbox_id))
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[WORLD-COORDS-DEBUG] Entity: %s | Hitbox: %d | Failed to get hitbox data", entity_index, hitbox_id))
         end
         return nil 
     end
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[WORLD-COORDS-DEBUG] Entity: %s | Hitbox: %d | Got hitbox data, transforming to world coordinates...", entity_index, hitbox_id))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[WORLD-COORDS-DEBUG] Entity: %s | Hitbox: %d | Got hitbox data, transforming to world coordinates...", entity_index, hitbox_id))
         if hitbox_data.center_local then
-            debug_log(string.format("[WORLD-COORDS-DEBUG] Entity: %s | Hitbox: %d | Local center: (%.2f,%.2f,%.2f)", entity_index, hitbox_id, 
+# debug_log(string.format("[WORLD-COORDS-DEBUG] Entity: %s | Hitbox: %d | Local center: (%.2f,%.2f,%.2f)", entity_index, hitbox_id, 
                 hitbox_data.center_local.x or 0, hitbox_data.center_local.y or 0, hitbox_data.center_local.z or 0))
         end
         if hitbox_data.matrix then
-            debug_log(string.format("[WORLD-COORDS-DEBUG] Entity: %s | Hitbox: %d | Matrix translation: (%.2f,%.2f,%.2f)", entity_index, hitbox_id, 
+# debug_log(string.format("[WORLD-COORDS-DEBUG] Entity: %s | Hitbox: %d | Matrix translation: (%.2f,%.2f,%.2f)", entity_index, hitbox_id, 
                 hitbox_data.matrix.m[0][3] or 0, hitbox_data.matrix.m[1][3] or 0, hitbox_data.matrix.m[2][3] or 0))
         end
     end
@@ -702,14 +702,14 @@ function get_hitbox_world_coords(entity_index, hitbox_id)
     local maxs_world = transform_point_precise(hitbox_data.matrix, hitbox_data.maxs_local)
     
     if not center_world or not mins_world or not maxs_world then 
-        if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-            debug_log(string.format("[WORLD-COORDS-DEBUG] Entity: %s | Hitbox: %d | Failed to transform to world coordinates", entity_index, hitbox_id))
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[WORLD-COORDS-DEBUG] Entity: %s | Hitbox: %d | Failed to transform to world coordinates", entity_index, hitbox_id))
         end
         return nil 
     end
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[WORLD-COORDS-DEBUG] Entity: %s | Hitbox: %d | Successfully got world coordinates: center(%.2f,%.2f,%.2f)", entity_index, hitbox_id, center_world.x or 0, center_world.y or 0, center_world.z or 0))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[WORLD-COORDS-DEBUG] Entity: %s | Hitbox: %d | Successfully got world coordinates: center(%.2f,%.2f,%.2f)", entity_index, hitbox_id, center_world.x or 0, center_world.y or 0, center_world.z or 0))
     end
     
     return {
@@ -724,95 +724,95 @@ end
 
 -- Анализ десинка через матрицу хитбоксов
 function analyze_desync_via_hitbox_matrix(entity_index, hitbox_id, angle_offset)
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Starting desync analysis...", entity_index, hitbox_id, angle_offset))
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Entity type: %s, alive: %s", entity_index, hitbox_id, angle_offset, type(entity_index), tostring(entity.is_alive and entity.is_alive(entity_index) or "unknown")))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Starting desync analysis...", entity_index, hitbox_id, angle_offset))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Entity type: %s, alive: %s", entity_index, hitbox_id, angle_offset, type(entity_index), tostring(entity.is_alive and entity.is_alive(entity_index) or "unknown")))
         if entity_index and entity.get_prop then
             local health = entity.get_prop(entity_index, "m_iHealth")
-            debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Entity health: %s", entity_index, hitbox_id, angle_offset, tostring(health)))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Entity health: %s", entity_index, hitbox_id, angle_offset, tostring(health)))
         end
         if entity_index and entity.get_client_renderable then
             local renderable = entity.get_client_renderable(entity_index)
-            debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Entity renderable: %s", entity_index, hitbox_id, angle_offset, tostring(renderable)))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Entity renderable: %s", entity_index, hitbox_id, angle_offset, tostring(renderable)))
         end
         if entity_index and entity.get_prop then
             local origin = entity.get_prop(entity_index, "m_vecOrigin")
             if origin then
-                debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Entity origin: %s", entity_index, hitbox_id, angle_offset, tostring(origin)))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Entity origin: %s", entity_index, hitbox_id, angle_offset, tostring(origin)))
             end
             local flags = entity.get_prop(entity_index, "m_fFlags")
             if flags then
-                debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Entity flags: %s", entity_index, hitbox_id, angle_offset, tostring(flags)))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Entity flags: %s", entity_index, hitbox_id, angle_offset, tostring(flags)))
             end
             local team = entity.get_prop(entity_index, "m_iTeamNum")
             if team then
-                debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Entity team: %s", entity_index, hitbox_id, angle_offset, tostring(team)))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Entity team: %s", entity_index, hitbox_id, angle_offset, tostring(team)))
             end
         end
     end
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Calling get_hitbox_matrix_precise...", entity_index, hitbox_id, angle_offset))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Calling get_hitbox_matrix_precise...", entity_index, hitbox_id, angle_offset))
     end
     local hitbox_data = get_hitbox_matrix_precise(entity_index, hitbox_id)
     if not hitbox_data then 
-        if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-            debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Failed to get hitbox data", entity_index, hitbox_id, angle_offset))
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Failed to get hitbox data", entity_index, hitbox_id, angle_offset))
         end
         return nil 
     end
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Successfully got hitbox data: %s", entity_index, hitbox_id, angle_offset, tostring(hitbox_data)))
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Hitbox data type: %s", entity_index, hitbox_id, angle_offset, type(hitbox_data)))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Successfully got hitbox data: %s", entity_index, hitbox_id, angle_offset, tostring(hitbox_data)))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Hitbox data type: %s", entity_index, hitbox_id, angle_offset, type(hitbox_data)))
         if hitbox_data.matrix then
-            debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Hitbox data matrix: %s (type: %s)", entity_index, hitbox_id, angle_offset, tostring(hitbox_data.matrix), type(hitbox_data.matrix)))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Hitbox data matrix: %s (type: %s)", entity_index, hitbox_id, angle_offset, tostring(hitbox_data.matrix), type(hitbox_data.matrix)))
         end
         if hitbox_data.center_local then
-            debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Hitbox data center_local: %s (type: %s)", entity_index, hitbox_id, angle_offset, tostring(hitbox_data.center_local), type(hitbox_data.center_local)))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Hitbox data center_local: %s (type: %s)", entity_index, hitbox_id, angle_offset, tostring(hitbox_data.center_local), type(hitbox_data.center_local)))
         end
     end
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Successfully got hitbox data", entity_index, hitbox_id, angle_offset))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Successfully got hitbox data", entity_index, hitbox_id, angle_offset))
         if hitbox_data.matrix then
-            debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Matrix translation: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, angle_offset,
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Matrix translation: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, angle_offset,
                 hitbox_data.matrix.m[0][3] or 0, hitbox_data.matrix.m[1][3] or 0, hitbox_data.matrix.m[2][3] or 0))
         end
         if hitbox_data.center_local then
-            debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Local center: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, angle_offset,
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Local center: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, angle_offset,
                 hitbox_data.center_local.x or 0, hitbox_data.center_local.y or 0, hitbox_data.center_local.z or 0))
         end
     end
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Successfully got hitbox data", entity_index, hitbox_id, angle_offset))
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Hitbox data type: %s", entity_index, hitbox_id, angle_offset, type(hitbox_data)))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Successfully got hitbox data", entity_index, hitbox_id, angle_offset))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Hitbox data type: %s", entity_index, hitbox_id, angle_offset, type(hitbox_data)))
         if hitbox_data.matrix then
-            debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Hitbox matrix translation: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, angle_offset, 
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Hitbox matrix translation: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, angle_offset, 
                 hitbox_data.matrix.m[0][3] or 0, hitbox_data.matrix.m[1][3] or 0, hitbox_data.matrix.m[2][3] or 0))
-            debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Hitbox matrix type: %s", entity_index, hitbox_id, angle_offset, type(hitbox_data.matrix)))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Hitbox matrix type: %s", entity_index, hitbox_id, angle_offset, type(hitbox_data.matrix)))
             if hitbox_data.matrix.m then
-                debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Hitbox matrix.m type: %s", entity_index, hitbox_id, angle_offset, type(hitbox_data.matrix.m)))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Hitbox matrix.m type: %s", entity_index, hitbox_id, angle_offset, type(hitbox_data.matrix.m)))
             end
         end
         if hitbox_data.center_local then
-            debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Local center: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, angle_offset, 
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Local center: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, angle_offset, 
                 hitbox_data.center_local.x or 0, hitbox_data.center_local.y or 0, hitbox_data.center_local.z or 0))
-            debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Local center type: %s", entity_index, hitbox_id, angle_offset, type(hitbox_data.center_local)))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Local center type: %s", entity_index, hitbox_id, angle_offset, type(hitbox_data.center_local)))
         end
         if hitbox_data.mins_local then
-            debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Local mins: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, angle_offset, 
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Local mins: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, angle_offset, 
                 hitbox_data.mins_local.x or 0, hitbox_data.mins_local.y or 0, hitbox_data.mins_local.z or 0))
         end
         if hitbox_data.maxs_local then
-            debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Local maxs: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, angle_offset, 
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Local maxs: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, angle_offset, 
                 hitbox_data.maxs_local.x or 0, hitbox_data.maxs_local.y or 0, hitbox_data.maxs_local.z or 0))
         end
     end
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Got hitbox data, creating rotation matrix...", entity_index, hitbox_id, angle_offset))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Got hitbox data, creating rotation matrix...", entity_index, hitbox_id, angle_offset))
     end
     
     -- Создаем матрицу с поворотом для анализа десинка
@@ -823,9 +823,9 @@ function analyze_desync_via_hitbox_matrix(entity_index, hitbox_id, angle_offset)
     local cos_a = math.cos(angle_rad)
     local sin_a = math.sin(angle_rad)
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Calculated cos=%.3f, sin=%.3f", entity_index, hitbox_id, angle_offset, cos_a, sin_a))
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Angle in radians: %.6f", entity_index, hitbox_id, angle_offset, angle_rad))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Calculated cos=%.3f, sin=%.3f", entity_index, hitbox_id, angle_offset, cos_a, sin_a))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Angle in radians: %.6f", entity_index, hitbox_id, angle_offset, angle_rad))
     end
     
     -- Поворот вокруг оси Z (Yaw) - исправленная матрица поворота
@@ -844,30 +844,30 @@ function analyze_desync_via_hitbox_matrix(entity_index, hitbox_id, angle_offset)
     rotation_matrix.m[2][2] = 1
     rotation_matrix.m[2][3] = 0
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Rotation matrix created: [0][0]=%.3f, [0][1]=%.3f, [1][0]=%.3f, [1][1]=%.3f", entity_index, hitbox_id, angle_offset, 
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Rotation matrix created: [0][0]=%.3f, [0][1]=%.3f, [1][0]=%.3f, [1][1]=%.3f", entity_index, hitbox_id, angle_offset, 
             rotation_matrix.m[0][0] or 0, rotation_matrix.m[0][1] or 0, rotation_matrix.m[1][0] or 0, rotation_matrix.m[1][1] or 0))
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Full rotation matrix:", entity_index, hitbox_id, angle_offset))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Full rotation matrix:", entity_index, hitbox_id, angle_offset))
         for i = 0, 2 do
             for j = 0, 3 do
-                debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Rotation[%d][%d] = %.6f", entity_index, hitbox_id, angle_offset, i, j, rotation_matrix.m[i][j] or 0))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Rotation[%d][%d] = %.6f", entity_index, hitbox_id, angle_offset, i, j, rotation_matrix.m[i][j] or 0))
             end
         end
-                debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Rotation matrix type: %s", entity_index, hitbox_id, angle_offset, type(rotation_matrix)))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Rotation matrix type: %s", entity_index, hitbox_id, angle_offset, type(rotation_matrix)))
         if rotation_matrix.m then
-            debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Rotation matrix.m type: %s", entity_index, hitbox_id, angle_offset, type(rotation_matrix.m)))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Rotation matrix.m type: %s", entity_index, hitbox_id, angle_offset, type(rotation_matrix.m)))
             if rotation_matrix.m[0] then
-                debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Rotation matrix.m[0] type: %s", entity_index, hitbox_id, angle_offset, type(rotation_matrix.m[0])))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Rotation matrix.m[0] type: %s", entity_index, hitbox_id, angle_offset, type(rotation_matrix.m[0])))
             end
         end
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Rotation matrix creation complete, combining with hitbox matrix...", entity_index, hitbox_id, angle_offset))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Rotation matrix creation complete, combining with hitbox matrix...", entity_index, hitbox_id, angle_offset))
     end
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Created rotation matrix, combining matrices...", entity_index, hitbox_id, angle_offset))
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Original hitbox matrix translation: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, angle_offset, 
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Created rotation matrix, combining matrices...", entity_index, hitbox_id, angle_offset))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Original hitbox matrix translation: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, angle_offset, 
             hitbox_data.matrix.m[0][3] or 0, hitbox_data.matrix.m[1][3] or 0, hitbox_data.matrix.m[2][3] or 0))
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Original hitbox matrix rotation - [0][0]=%.6f, [0][1]=%.6f, [1][0]=%.6f, [1][1]=%.6f", entity_index, hitbox_id, angle_offset, 
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Original hitbox matrix rotation - [0][0]=%.6f, [0][1]=%.6f, [1][0]=%.6f, [1][1]=%.6f", entity_index, hitbox_id, angle_offset, 
             hitbox_data.matrix.m[0][0] or 0, hitbox_data.matrix.m[0][1] or 0, hitbox_data.matrix.m[1][0] or 0, hitbox_data.matrix.m[1][1] or 0))
     end
     
@@ -886,91 +886,91 @@ function analyze_desync_via_hitbox_matrix(entity_index, hitbox_id, angle_offset)
         end
     end
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Matrix combination complete, combined matrix details:", entity_index, hitbox_id, angle_offset))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Matrix combination complete, combined matrix details:", entity_index, hitbox_id, angle_offset))
         for i = 0, 2 do
             for j = 0, 3 do
-                debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Combined[%d][%d] = %.6f", entity_index, hitbox_id, angle_offset, i, j, combined_matrix.m[i][j] or 0))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Combined[%d][%d] = %.6f", entity_index, hitbox_id, angle_offset, i, j, combined_matrix.m[i][j] or 0))
             end
         end
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Combined matrix type: %s", entity_index, hitbox_id, angle_offset, type(combined_matrix)))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Combined matrix type: %s", entity_index, hitbox_id, angle_offset, type(combined_matrix)))
         if combined_matrix.m then
-            debug_log(string.format("[ANALYZE-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Combined matrix.m type: %s", entity_index, hitbox_id, angle_offset, type(combined_matrix.m)))
+# debug_log(string.format("[ANALYZE-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Combined matrix.m type: %s", entity_index, hitbox_id, angle_offset, type(combined_matrix.m)))
             if combined_matrix.m[0] then
-                debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Combined matrix.m[0] type: %s", entity_index, hitbox_id, angle_offset, type(combined_matrix.m[0])))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Combined matrix.m[0] type: %s", entity_index, hitbox_id, angle_offset, type(combined_matrix.m[0])))
             end
         end
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Matrix combination complete, starting point transformation...", entity_index, hitbox_id, angle_offset))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Matrix combination complete, starting point transformation...", entity_index, hitbox_id, angle_offset))
     end
-                debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Combined matrix.m[0] type: %s", entity_index, hitbox_id, angle_offset, type(combined_matrix.m[0])))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Combined matrix.m[0] type: %s", entity_index, hitbox_id, angle_offset, type(combined_matrix.m[0])))
             end
         end
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Matrix combination complete, transforming points...", entity_index, hitbox_id, angle_offset))
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Starting point transformation with combined matrix...", entity_index, hitbox_id, angle_offset))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Matrix combination complete, transforming points...", entity_index, hitbox_id, angle_offset))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Starting point transformation with combined matrix...", entity_index, hitbox_id, angle_offset))
     end
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Matrix combination complete, combined matrix [0][3]=%.3f, [1][3]=%.3f, [2][3]=%.3f", entity_index, hitbox_id, angle_offset, 
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Matrix combination complete, combined matrix [0][3]=%.3f, [1][3]=%.3f, [2][3]=%.3f", entity_index, hitbox_id, angle_offset, 
             combined_matrix.m[0][3] or 0, combined_matrix.m[1][3] or 0, combined_matrix.m[2][3] or 0))
     end
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Combined matrices, transforming points...", entity_index, hitbox_id, angle_offset))
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Combined matrix details - [0][3]=%.6f, [1][3]=%.6f, [2][3]=%.6f", entity_index, hitbox_id, angle_offset, 
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Combined matrices, transforming points...", entity_index, hitbox_id, angle_offset))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Combined matrix details - [0][3]=%.6f, [1][3]=%.6f, [2][3]=%.6f", entity_index, hitbox_id, angle_offset, 
             combined_matrix.m[0][3] or 0, combined_matrix.m[1][3] or 0, combined_matrix.m[2][3] or 0))
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Combined matrix rotation - [0][0]=%.6f, [0][1]=%.6f, [1][0]=%.6f, [1][1]=%.6f", entity_index, hitbox_id, angle_offset, 
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Combined matrix rotation - [0][0]=%.6f, [0][1]=%.6f, [1][0]=%.6f, [1][1]=%.6f", entity_index, hitbox_id, angle_offset, 
             combined_matrix.m[0][0] or 0, combined_matrix.m[0][1] or 0, combined_matrix.m[1][0] or 0, combined_matrix.m[1][1] or 0))
     end
     
     -- Трансформируем точки с новой матрицей
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Transforming center point with combined matrix...", entity_index, hitbox_id, angle_offset))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Transforming center point with combined matrix...", entity_index, hitbox_id, angle_offset))
     end
     local center_rotated = transform_point_precise(combined_matrix, hitbox_data.center_local)
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Transforming mins point with combined matrix...", entity_index, hitbox_id, angle_offset))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Transforming mins point with combined matrix...", entity_index, hitbox_id, angle_offset))
     end
     local mins_rotated = transform_point_precise(combined_matrix, hitbox_data.mins_local)
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Transforming maxs point with combined matrix...", entity_index, hitbox_id, angle_offset))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Transforming maxs point with combined matrix...", entity_index, hitbox_id, angle_offset))
     end
     local maxs_rotated = transform_point_precise(combined_matrix, hitbox_data.maxs_local)
     
     if not center_rotated or not mins_rotated or not maxs_rotated then 
-        if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-            debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Failed to transform rotated points", entity_index, hitbox_id, angle_offset))
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Failed to transform rotated points", entity_index, hitbox_id, angle_offset))
         end
         return nil 
     end
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Successfully transformed rotated points", entity_index, hitbox_id, angle_offset))
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Rotated center: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, angle_offset, 
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Successfully transformed rotated points", entity_index, hitbox_id, angle_offset))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Rotated center: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, angle_offset, 
             center_rotated.x or 0, center_rotated.y or 0, center_rotated.z or 0))
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Rotated center type: %s", entity_index, hitbox_id, angle_offset, type(center_rotated)))
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Rotated mins: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, angle_offset, 
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Rotated center type: %s", entity_index, hitbox_id, angle_offset, type(center_rotated)))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Rotated mins: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, angle_offset, 
             mins_rotated.x or 0, mins_rotated.y or 0, mins_rotated.z or 0))
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Rotated mins type: %s", entity_index, hitbox_id, angle_offset, type(mins_rotated)))
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Rotated maxs: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, angle_offset, 
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Rotated mins type: %s", entity_index, hitbox_id, angle_offset, type(mins_rotated)))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Rotated maxs: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, angle_offset, 
             maxs_rotated.x or 0, maxs_rotated.y or 0, maxs_rotated.z or 0))
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Rotated maxs type: %s", entity_index, hitbox_id, angle_offset, type(maxs_rotated)))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Rotated maxs type: %s", entity_index, hitbox_id, angle_offset, type(maxs_rotated)))
     end
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Transformed rotated points, getting original center...", entity_index, hitbox_id, angle_offset))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Transformed rotated points, getting original center...", entity_index, hitbox_id, angle_offset))
     end
     
     -- Вычисляем смещение от оригинальной позиции
     local original_center = transform_point_precise(hitbox_data.matrix, hitbox_data.center_local)
     if not original_center then 
-        if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-            debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Failed to get original center", entity_index, hitbox_id, angle_offset))
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Failed to get original center", entity_index, hitbox_id, angle_offset))
         end
         return nil 
     end
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Got original center: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, angle_offset, 
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Got original center: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, angle_offset, 
             original_center.x or 0, original_center.y or 0, original_center.z or 0))
     end
     
@@ -980,47 +980,47 @@ function analyze_desync_via_hitbox_matrix(entity_index, hitbox_id, angle_offset)
         z = (center_rotated.z or 0) - (original_center.z or 0)
     }
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Desync offset: (%.2f,%.2f,%.2f)", entity_index, hitbox_id, angle_offset, desync_offset.x or 0, desync_offset.y or 0, desync_offset.z or 0))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Desync offset: (%.2f,%.2f,%.2f)", entity_index, hitbox_id, angle_offset, desync_offset.x or 0, desync_offset.y or 0, desync_offset.z or 0))
     end
     
     local desync_magnitude = math.sqrt((desync_offset.x or 0)^2 + (desync_offset.y or 0)^2 + (desync_offset.z or 0)^2)
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Desync offset components: x=%.6f, y=%.6f, z=%.6f", entity_index, hitbox_id, angle_offset, 
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Desync offset components: x=%.6f, y=%.6f, z=%.6f", entity_index, hitbox_id, angle_offset, 
             desync_offset.x or 0, desync_offset.y or 0, desync_offset.z or 0))
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Desync magnitude calculation: sqrt(%.6f^2 + %.6f^2 + %.6f^2) = %.6f", entity_index, hitbox_id, angle_offset, 
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Desync magnitude calculation: sqrt(%.6f^2 + %.6f^2 + %.6f^2) = %.6f", entity_index, hitbox_id, angle_offset, 
             (desync_offset.x or 0)^2, (desync_offset.y or 0)^2, (desync_offset.z or 0)^2, desync_magnitude))
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Desync magnitude type: %s", entity_index, hitbox_id, angle_offset, type(desync_magnitude)))
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Desync offset type: %s", entity_index, hitbox_id, angle_offset, type(desync_offset)))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Desync magnitude type: %s", entity_index, hitbox_id, angle_offset, type(desync_magnitude)))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Desync offset type: %s", entity_index, hitbox_id, angle_offset, type(desync_offset)))
     end
     
     -- Ensure desync magnitude has a minimum meaningful value
     if desync_magnitude < 0.001 then
         desync_magnitude = 0.001
-        if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-            debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Desync magnitude too small (%.6f), applying minimum threshold: %.6f", entity_index, hitbox_id, angle_offset, desync_magnitude, desync_magnitude))
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Desync magnitude too small (%.6f), applying minimum threshold: %.6f", entity_index, hitbox_id, angle_offset, desync_magnitude, desync_magnitude))
         end
     end
     
     -- Additional debugging for desync magnitude calculation
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Desync offset components: x=%.6f, y=%.6f, z=%.6f", entity_index, hitbox_id, angle_offset, 
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Desync offset components: x=%.6f, y=%.6f, z=%.6f", entity_index, hitbox_id, angle_offset, 
             desync_offset.x or 0, desync_offset.y or 0, desync_offset.z or 0))
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Desync magnitude calculation: sqrt(%.6f^2 + %.6f^2 + %.6f^2) = %.6f", entity_index, hitbox_id, angle_offset, 
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Desync magnitude calculation: sqrt(%.6f^2 + %.6f^2 + %.6f^2) = %.6f", entity_index, hitbox_id, angle_offset, 
             (desync_offset.x or 0)^2, (desync_offset.y or 0)^2, (desync_offset.z or 0)^2, desync_magnitude))
     end
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Desync analysis complete, magnitude: %.6f", entity_index, hitbox_id, angle_offset, desync_magnitude))
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Desync offset: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, angle_offset, 
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Desync analysis complete, magnitude: %.6f", entity_index, hitbox_id, angle_offset, desync_magnitude))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Desync offset: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, angle_offset, 
             desync_offset.x or 0, desync_offset.y or 0, desync_offset.z or 0))
         if center_rotated then
-            debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Rotated center: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, angle_offset, 
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Rotated center: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, angle_offset, 
                 center_rotated.x or 0, center_rotated.y or 0, center_rotated.z or 0))
         end
         if original_center then
-            debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Original center: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, angle_offset, 
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Original center: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, angle_offset, 
                 original_center.x or 0, original_center.y or 0, original_center.z or 0))
         end
     end
@@ -1037,17 +1037,17 @@ function analyze_desync_via_hitbox_matrix(entity_index, hitbox_id, angle_offset)
         original_matrix = hitbox_data.matrix
     }
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Final result object:", entity_index, hitbox_id, angle_offset))
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f |   original_center: %s (type: %s)", entity_index, hitbox_id, angle_offset, tostring(result.original_center), type(result.original_center)))
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f |   rotated_center: %s (type: %s)", entity_index, hitbox_id, angle_offset, tostring(result.rotated_center), type(result.rotated_center)))
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f |   rotated_mins: %s (type: %s)", entity_index, hitbox_id, angle_offset, tostring(result.rotated_mins), type(result.rotated_mins)))
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f |   rotated_maxs: %s (type: %s)", entity_index, hitbox_id, angle_offset, tostring(result.rotated_maxs), type(result.rotated_maxs)))
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f |   desync_offset: %s (type: %s)", entity_index, hitbox_id, angle_offset, tostring(result.desync_offset), type(result.desync_offset)))
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f |   desync_magnitude: %s (type: %s)", entity_index, hitbox_id, angle_offset, tostring(result.desync_magnitude), type(result.desync_magnitude)))
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f |   angle_offset: %s (type: %s)", entity_index, hitbox_id, angle_offset, tostring(result.angle_offset), type(result.angle_offset)))
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f |   matrix: %s (type: %s)", entity_index, hitbox_id, angle_offset, tostring(result.matrix), type(result.matrix)))
-        debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f |   original_matrix: %s (type: %s)", entity_index, hitbox_id, angle_offset, tostring(result.original_matrix), type(result.original_matrix)))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Final result object:", entity_index, hitbox_id, angle_offset))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f |   original_center: %s (type: %s)", entity_index, hitbox_id, angle_offset, tostring(result.original_center), type(result.original_center)))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f |   rotated_center: %s (type: %s)", entity_index, hitbox_id, angle_offset, tostring(result.rotated_center), type(result.rotated_center)))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f |   rotated_mins: %s (type: %s)", entity_index, hitbox_id, angle_offset, tostring(result.rotated_mins), type(result.rotated_mins)))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f |   rotated_maxs: %s (type: %s)", entity_index, hitbox_id, angle_offset, tostring(result.rotated_maxs), type(result.rotated_maxs)))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f |   desync_offset: %s (type: %s)", entity_index, hitbox_id, angle_offset, tostring(result.desync_offset), type(result.desync_offset)))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f |   desync_magnitude: %s (type: %s)", entity_index, hitbox_id, angle_offset, tostring(result.desync_magnitude), type(result.desync_magnitude)))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f |   angle_offset: %s (type: %s)", entity_index, hitbox_id, angle_offset, tostring(result.angle_offset), type(result.angle_offset)))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f |   matrix: %s (type: %s)", entity_index, hitbox_id, angle_offset, tostring(result.matrix), type(result.matrix)))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f |   original_matrix: %s (type: %s)", entity_index, hitbox_id, angle_offset, tostring(result.original_matrix), type(result.original_matrix)))
     end
     
     return result
@@ -1055,33 +1055,33 @@ end
 
 -- Система предсказания хитбоксов через матрицу
 function predict_hitbox_via_matrix(entity_index, hitbox_id, prediction_time, velocity)
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Time: %.2f | Velocity: (%.2f,%.2f,%.2f) | Starting matrix prediction...", entity_index, hitbox_id, prediction_time, velocity.x or 0, velocity.y or 0, velocity.z or 0))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Time: %.2f | Velocity: (%.2f,%.2f,%.2f) | Starting matrix prediction...", entity_index, hitbox_id, prediction_time, velocity.x or 0, velocity.y or 0, velocity.z or 0))
     end
     
     local hitbox_data = get_hitbox_matrix_precise(entity_index, hitbox_id)
     if not hitbox_data then 
-        if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-            debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Failed to get hitbox data", entity_index, hitbox_id))
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Failed to get hitbox data", entity_index, hitbox_id))
         end
         return nil 
     end
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Got hitbox data, getting current center...", entity_index, hitbox_id))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Got hitbox data, getting current center...", entity_index, hitbox_id))
     end
     
     -- Получаем текущую позицию
     local current_center = transform_point_precise(hitbox_data.matrix, hitbox_data.center_local)
     if not current_center then 
-        if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-            debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Failed to get current center", entity_index, hitbox_id))
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Failed to get current center", entity_index, hitbox_id))
         end
         return nil 
     end
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Current center: (%.2f,%.2f,%.2f), calculating prediction...", entity_index, hitbox_id, current_center.x or 0, current_center.y or 0, current_center.z or 0))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Current center: (%.2f,%.2f,%.2f), calculating prediction...", entity_index, hitbox_id, current_center.x or 0, current_center.y or 0, current_center.z or 0))
     end
     
     -- Предсказываем будущую позицию на основе скорости
@@ -1091,14 +1091,14 @@ function predict_hitbox_via_matrix(entity_index, hitbox_id, prediction_time, vel
         z = (current_center.z or 0) + ((velocity.z or 0) * prediction_time)
     }
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Predicted center: (%.2f,%.2f,%.2f), creating offset matrix...", entity_index, hitbox_id, predicted_center.x or 0, predicted_center.y or 0, predicted_center.z or 0))
-        debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Prediction calculation details:", entity_index, hitbox_id))
-        debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   x = %.6f + (%.6f * %.6f) = %.6f", entity_index, hitbox_id, 
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Predicted center: (%.2f,%.2f,%.2f), creating offset matrix...", entity_index, hitbox_id, predicted_center.x or 0, predicted_center.y or 0, predicted_center.z or 0))
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Prediction calculation details:", entity_index, hitbox_id))
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   x = %.6f + (%.6f * %.6f) = %.6f", entity_index, hitbox_id, 
             current_center.x or 0, velocity.x or 0, prediction_time, predicted_center.x or 0))
-        debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   y = %.6f + (%.6f * %.6f) = %.6f", entity_index, hitbox_id, 
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   y = %.6f + (%.6f * %.6f) = %.6f", entity_index, hitbox_id, 
             current_center.y or 0, velocity.y or 0, prediction_time, predicted_center.y or 0))
-        debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   z = %.6f + (%.6f * %.6f) = %.6f", entity_index, hitbox_id, 
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   z = %.6f + (%.6f * %.6f) = %.6f", entity_index, hitbox_id, 
             current_center.z or 0, velocity.z or 0, prediction_time, predicted_center.z or 0))
     end
     
@@ -1110,18 +1110,18 @@ function predict_hitbox_via_matrix(entity_index, hitbox_id, prediction_time, vel
         end
     end
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Time: %.3f | Created offset matrix:", entity_index, hitbox_id, prediction_time))
-        debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Time: %.3f |   Original matrix translation: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, prediction_time, 
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Time: %.3f | Created offset matrix:", entity_index, hitbox_id, prediction_time))
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Time: %.3f |   Original matrix translation: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, prediction_time, 
             hitbox_data.matrix.m[0][3] or 0, hitbox_data.matrix.m[1][3] or 0, hitbox_data.matrix.m[2][3] or 0))
-        debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Time: %.3f |   Velocity components: x=%.6f, y=%.6f, z=%.6f", entity_index, hitbox_id, prediction_time, 
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Time: %.3f |   Velocity components: x=%.6f, y=%.6f, z=%.6f", entity_index, hitbox_id, prediction_time, 
             velocity.x or 0, velocity.y or 0, velocity.z or 0))
-        debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Time: %.3f |   Prediction time: %.6f", entity_index, hitbox_id, prediction_time, prediction_time))
-        debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Time: %.3f |   Offset matrix type: %s", entity_index, hitbox_id, prediction_time, type(offset_matrix)))
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Time: %.3f |   Prediction time: %.6f", entity_index, hitbox_id, prediction_time, prediction_time))
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Time: %.3f |   Offset matrix type: %s", entity_index, hitbox_id, prediction_time, type(offset_matrix)))
         if offset_matrix then
-            debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Time: %.3f |   Offset matrix.m type: %s", entity_index, hitbox_id, prediction_time, type(offset_matrix.m)))
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Time: %.3f |   Offset matrix.m type: %s", entity_index, hitbox_id, prediction_time, type(offset_matrix.m)))
             if offset_matrix.m then
-                debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Time: %.3f |   Offset matrix.m[0] type: %s", entity_index, hitbox_id, prediction_time, type(offset_matrix.m[0])))
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Time: %.3f |   Offset matrix.m[0] type: %s", entity_index, hitbox_id, prediction_time, type(offset_matrix.m[0])))
             end
         end
     end
@@ -1131,18 +1131,18 @@ function predict_hitbox_via_matrix(entity_index, hitbox_id, prediction_time, vel
     offset_matrix.m[1][3] = offset_matrix.m[1][3] + ((velocity.y or 0) * prediction_time)
     offset_matrix.m[2][3] = offset_matrix.m[2][3] + ((velocity.z or 0) * prediction_time)
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Applied offset to matrix:", entity_index, hitbox_id))
-        debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   Original translation: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, 
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Applied offset to matrix:", entity_index, hitbox_id))
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   Original translation: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, 
             hitbox_data.matrix.m[0][3] or 0, hitbox_data.matrix.m[1][3] or 0, hitbox_data.matrix.m[2][3] or 0))
-        debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   Offset: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, 
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   Offset: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, 
             (velocity.x or 0) * prediction_time, (velocity.y or 0) * prediction_time, (velocity.z or 0) * prediction_time))
-        debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   New translation: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, 
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   New translation: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, 
             offset_matrix.m[0][3] or 0, offset_matrix.m[1][3] or 0, offset_matrix.m[2][3] or 0))
     end
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Applied offset to matrix, transforming points...", entity_index, hitbox_id))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Applied offset to matrix, transforming points...", entity_index, hitbox_id))
     end
     
     -- Трансформируем точки с предсказанной матрицей
@@ -1150,44 +1150,44 @@ function predict_hitbox_via_matrix(entity_index, hitbox_id, prediction_time, vel
     local predicted_maxs = transform_point_precise(offset_matrix, hitbox_data.maxs_local)
     
     if not predicted_mins or not predicted_maxs then 
-        if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-            debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Failed to transform predicted points", entity_index, hitbox_id))
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Failed to transform predicted points", entity_index, hitbox_id))
         end
         return nil 
     end
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Time: %.3f | Successfully transformed predicted points:", entity_index, hitbox_id, prediction_time))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Time: %.3f | Successfully transformed predicted points:", entity_index, hitbox_id, prediction_time))
         if predicted_mins then
-            debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Time: %.3f |   Predicted mins: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, prediction_time, 
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Time: %.3f |   Predicted mins: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, prediction_time, 
                 predicted_mins.x or 0, predicted_mins.y or 0, predicted_mins.z or 0))
         end
         if predicted_maxs then
-            debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Time: %.3f |   Predicted maxs: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, prediction_time, 
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Time: %.3f |   Predicted maxs: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, prediction_time, 
                 predicted_maxs.x or 0, predicted_maxs.y or 0, predicted_maxs.z or 0))
         end
     end
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Successfully transformed predicted points:", entity_index, hitbox_id))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Successfully transformed predicted points:", entity_index, hitbox_id))
         if predicted_mins then
-            debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   Predicted mins: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, 
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   Predicted mins: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, 
                 predicted_mins.x or 0, predicted_mins.y or 0, predicted_mins.z or 0))
         end
         if predicted_maxs then
-            debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   Predicted maxs: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, 
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   Predicted maxs: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, 
                 predicted_maxs.x or 0, predicted_maxs.y or 0, predicted_maxs.z or 0))
         end
     end
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Successfully created prediction", entity_index, hitbox_id))
-        debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Final prediction details:", entity_index, hitbox_id))
-        debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   Current center: (%.2f,%.2f,%.2f)", entity_index, hitbox_id, 
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Successfully created prediction", entity_index, hitbox_id))
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Final prediction details:", entity_index, hitbox_id))
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   Current center: (%.2f,%.2f,%.2f)", entity_index, hitbox_id, 
             current_center.x or 0, current_center.y or 0, current_center.z or 0))
-        debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   Predicted center: (%.2f,%.2f,%.2f)", entity_index, hitbox_id, 
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   Predicted center: (%.2f,%.2f,%.2f)", entity_index, hitbox_id, 
             predicted_center.x or 0, predicted_center.y or 0, predicted_center.z or 0))
-        debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   Prediction time: %.2f", entity_index, hitbox_id, prediction_time))
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   Prediction time: %.2f", entity_index, hitbox_id, prediction_time))
     end
     
     local result = {
@@ -1201,15 +1201,15 @@ function predict_hitbox_via_matrix(entity_index, hitbox_id, prediction_time, vel
         original_matrix = hitbox_data.matrix
     }
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Time: %.3f | Returning prediction result with %d fields", entity_index, hitbox_id, prediction_time, 
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Time: %.3f | Returning prediction result with %d fields", entity_index, hitbox_id, prediction_time, 
             (result.current_center and 1 or 0) + (result.predicted_center and 1 or 0) + (result.predicted_mins and 1 or 0) + (result.predicted_maxs and 1 or 0) + 4))
         if result.current_center then
-            debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Time: %.3f |   Current center: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, prediction_time, 
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Time: %.3f |   Current center: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, prediction_time, 
                 result.current_center.x or 0, result.current_center.y or 0, result.current_center.z or 0))
         end
         if result.predicted_center then
-            debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Time: %.3f |   Predicted center: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, prediction_time, 
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Time: %.3f |   Predicted center: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, prediction_time, 
                 result.predicted_center.x or 0, result.predicted_center.y or 0, result.predicted_center.z or 0))
         end
     end
@@ -1219,20 +1219,20 @@ end
 
 -- Анализ пересечений хитбоксов через матрицу
 function analyze_hitbox_intersection_via_matrix(entity_index, hitbox_id, ray_start, ray_end)
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[INTERSECTION-DEBUG] Entity: %s | Hitbox: %d | Analyzing intersection...", entity_index, hitbox_id))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[INTERSECTION-DEBUG] Entity: %s | Hitbox: %d | Analyzing intersection...", entity_index, hitbox_id))
     end
     
     local hitbox_data = get_hitbox_matrix_precise(entity_index, hitbox_id)
     if not hitbox_data then 
-        if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-            debug_log(string.format("[INTERSECTION-DEBUG] Entity: %s | Hitbox: %d | Failed to get hitbox data", entity_index, hitbox_id))
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[INTERSECTION-DEBUG] Entity: %s | Hitbox: %d | Failed to get hitbox data", entity_index, hitbox_id))
         end
         return nil 
     end
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[INTERSECTION-DEBUG] Entity: %s | Hitbox: %d | Got hitbox data, transforming ray to local coordinates...", entity_index, hitbox_id))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[INTERSECTION-DEBUG] Entity: %s | Hitbox: %d | Got hitbox data, transforming ray to local coordinates...", entity_index, hitbox_id))
     end
     
     -- Трансформируем луч в локальные координаты хитбокса
@@ -1248,14 +1248,14 @@ function analyze_hitbox_intersection_via_matrix(entity_index, hitbox_id, ray_sta
         z = (ray_end.z or 0) - (hitbox_data.matrix.m[2][3] or 0)
     }
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[INTERSECTION-DEBUG] Entity: %s | Hitbox: %d | Local ray: start(%.2f,%.2f,%.2f) -> end(%.2f,%.2f,%.2f)", entity_index, hitbox_id, 
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[INTERSECTION-DEBUG] Entity: %s | Hitbox: %d | Local ray: start(%.2f,%.2f,%.2f) -> end(%.2f,%.2f,%.2f)", entity_index, hitbox_id, 
             local_ray_start.x or 0, local_ray_start.y or 0, local_ray_start.z or 0,
             local_ray_end.x or 0, local_ray_end.y or 0, local_ray_end.z or 0))
         
         -- Вычисляем длину луча
         local ray_length = math.sqrt((local_ray_end.x - local_ray_start.x)^2 + (local_ray_end.y - local_ray_start.y)^2 + (local_ray_end.z - local_ray_start.z)^2)
-        debug_log(string.format("[INTERSECTION-DEBUG] Entity: %s | Hitbox: %d | Ray length: %.2f", entity_index, hitbox_id, ray_length))
+# debug_log(string.format("[INTERSECTION-DEBUG] Entity: %s | Hitbox: %d | Ray length: %.2f", entity_index, hitbox_id, ray_length))
     end
     
     -- Вычисляем направление луча
@@ -1267,14 +1267,14 @@ function analyze_hitbox_intersection_via_matrix(entity_index, hitbox_id, ray_sta
     
     local ray_length = math.sqrt(ray_direction.x^2 + ray_direction.y^2 + ray_direction.z^2)
     if ray_length < 0.001 then 
-        if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-            debug_log(string.format("[INTERSECTION-DEBUG] Entity: %s | Hitbox: %d | Ray length too small: %.6f", entity_index, hitbox_id, ray_length))
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[INTERSECTION-DEBUG] Entity: %s | Hitbox: %d | Ray length too small: %.6f", entity_index, hitbox_id, ray_length))
         end
         return nil 
     end
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[INTERSECTION-DEBUG] Entity: %s | Hitbox: %d | Ray length: %.2f, normalizing direction...", entity_index, hitbox_id, ray_length))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[INTERSECTION-DEBUG] Entity: %s | Hitbox: %d | Ray length: %.2f, normalizing direction...", entity_index, hitbox_id, ray_length))
     end
     
     -- Нормализуем направление
@@ -1309,14 +1309,14 @@ function analyze_hitbox_intersection_via_matrix(entity_index, hitbox_id, ray_sta
     
     -- Проверяем валидность пересечения
     if t_min > t_max or t_max < 0 then 
-        if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-            debug_log(string.format("[INTERSECTION-DEBUG] Entity: %s | Hitbox: %d | Invalid intersection: t_min=%.2f, t_max=%.2f", entity_index, hitbox_id, t_min, t_max))
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[INTERSECTION-DEBUG] Entity: %s | Hitbox: %d | Invalid intersection: t_min=%.2f, t_max=%.2f", entity_index, hitbox_id, t_min, t_max))
         end
         return nil 
     end
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[INTERSECTION-DEBUG] Entity: %s | Hitbox: %d | Valid intersection: t_min=%.2f, t_max=%.2f", entity_index, hitbox_id, t_min, t_max))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[INTERSECTION-DEBUG] Entity: %s | Hitbox: %d | Valid intersection: t_min=%.2f, t_max=%.2f", entity_index, hitbox_id, t_min, t_max))
     end
     
     -- Вычисляем точку пересечения
@@ -1326,18 +1326,18 @@ function analyze_hitbox_intersection_via_matrix(entity_index, hitbox_id, ray_sta
         z = local_ray_start.z + ray_direction.z * t_min
     }
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[INTERSECTION-DEBUG] Entity: %s | Hitbox: %d | Local intersection: (%.2f,%.2f,%.2f)", entity_index, hitbox_id, 
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[INTERSECTION-DEBUG] Entity: %s | Hitbox: %d | Local intersection: (%.2f,%.2f,%.2f)", entity_index, hitbox_id, 
             intersection_local.x or 0, intersection_local.y or 0, intersection_local.z or 0))
     end
     
     -- Трансформируем обратно в мировые координаты
     local intersection_world = transform_point_precise(hitbox_data.matrix, intersection_local)
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[INTERSECTION-DEBUG] Entity: %s | Hitbox: %d | World intersection: (%.2f,%.2f,%.2f), distance: %.2f", entity_index, hitbox_id, 
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[INTERSECTION-DEBUG] Entity: %s | Hitbox: %d | World intersection: (%.2f,%.2f,%.2f), distance: %.2f", entity_index, hitbox_id, 
             intersection_world.x or 0, intersection_world.y or 0, intersection_world.z or 0, t_min))
-        debug_log(string.format("[INTERSECTION-DEBUG] Entity: %s | Hitbox: %d | Intersection calculation: local(%.6f,%.6f,%.6f) -> world(%.6f,%.6f,%.6f)", entity_index, hitbox_id, 
+# debug_log(string.format("[INTERSECTION-DEBUG] Entity: %s | Hitbox: %d | Intersection calculation: local(%.6f,%.6f,%.6f) -> world(%.6f,%.6f,%.6f)", entity_index, hitbox_id, 
             intersection_local.x or 0, intersection_local.y or 0, intersection_local.z or 0,
             intersection_world.x or 0, intersection_world.y or 0, intersection_world.z or 0))
     end
@@ -1351,8 +1351,8 @@ function analyze_hitbox_intersection_via_matrix(entity_index, hitbox_id, ray_sta
         local_intersection = intersection_local
     }
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[INTERSECTION-DEBUG] Entity: %s | Hitbox: %d | Returning intersection result with %d fields", entity_index, hitbox_id, 
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[INTERSECTION-DEBUG] Entity: %s | Hitbox: %d | Returning intersection result with %d fields", entity_index, hitbox_id, 
             (result.intersection and 1 or 0) + (result.distance and 1 or 0) + (result.hitbox_data and 1 or 0) + 3))
     end
     
@@ -1361,13 +1361,13 @@ end
 
 -- Система валидации хитбоксов через матрицу
 function validate_hitbox_via_matrix(entity_index, hitbox_id, angle_offsets)
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Starting validation with %d angles...", entity_index, hitbox_id, #angle_offsets))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Starting validation with %d angles...", entity_index, hitbox_id, #angle_offsets))
     end
     
     if not angle_offsets or #angle_offsets == 0 then 
-        if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-            debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | No angle offsets provided", entity_index, hitbox_id))
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | No angle offsets provided", entity_index, hitbox_id))
         end
         return nil 
     end
@@ -1375,14 +1375,14 @@ function validate_hitbox_via_matrix(entity_index, hitbox_id, angle_offsets)
     local validation_results = {}
     
     for _, angle_offset in ipairs(angle_offsets) do
-        if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-            debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Analyzing angle offset: %.1f", entity_index, hitbox_id, angle_offset))
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Analyzing angle offset: %.1f", entity_index, hitbox_id, angle_offset))
         end
         
         local desync_analysis = analyze_desync_via_hitbox_matrix(entity_index, hitbox_id, angle_offset)
         if desync_analysis then
-            if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-                debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Angle %.1f analysis successful, desync: %.2f", entity_index, hitbox_id, angle_offset, desync_analysis.desync_magnitude or 0))
+            if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Angle %.1f analysis successful, desync: %.2f", entity_index, hitbox_id, angle_offset, desync_analysis.desync_magnitude or 0))
             end
             
             table.insert(validation_results, {
@@ -1392,56 +1392,56 @@ function validate_hitbox_via_matrix(entity_index, hitbox_id, angle_offsets)
                 matrix = desync_analysis.matrix
             })
         else
-            if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-                debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Angle %.1f analysis failed", entity_index, hitbox_id, angle_offset))
+            if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Angle %.1f analysis failed", entity_index, hitbox_id, angle_offset))
             end
         end
     end
     
     if #validation_results == 0 then 
-        if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-            debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | No successful analyses, returning nil", entity_index, hitbox_id))
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | No successful analyses, returning nil", entity_index, hitbox_id))
         end
         return nil 
     end
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Got %d successful analyses, sorting...", entity_index, hitbox_id, #validation_results))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Got %d successful analyses, sorting...", entity_index, hitbox_id, #validation_results))
         for i, result_item in ipairs(validation_results) do
-            debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Pre-sort result %d: angle=%.1f, desync=%.6f, offset=(%.6f,%.6f,%.6f)", 
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Pre-sort result %d: angle=%.1f, desync=%.6f, offset=(%.6f,%.6f,%.6f)", 
                 entity_index, hitbox_id, i, result_item.angle_offset or 0, result_item.desync_magnitude or 0, 
                 result_item.desync_offset.x or 0, result_item.desync_offset.y or 0, result_item.desync_offset.z or 0))
         end
     end
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Pre-sort validation results:", entity_index, hitbox_id))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Pre-sort validation results:", entity_index, hitbox_id))
         for i, result_item in ipairs(validation_results) do
-            debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   Result %d: angle=%.1f, desync=%.6f, offset=(%.6f,%.6f,%.6f)", 
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   Result %d: angle=%.1f, desync=%.6f, offset=(%.6f,%.6f,%.6f)", 
                 entity_index, hitbox_id, i, result_item.angle_offset or 0, result_item.desync_magnitude or 0, 
                 result_item.desync_offset.x or 0, result_item.desync_offset.y or 0, result_item.desync_offset.z or 0))
         end
-        debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Raw, unsorted results:", entity_index, hitbox_id))
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Raw, unsorted results:", entity_index, hitbox_id))
         for i, result_item in ipairs(validation_results) do
-            debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   Raw result %d: angle=%.1f, desync=%.6f, offset=(%.6f,%.6f,%.6f)", 
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   Raw result %d: angle=%.1f, desync=%.6f, offset=(%.6f,%.6f,%.6f)", 
                 entity_index, hitbox_id, i, result_item.angle_offset or 0, result_item.desync_magnitude or 0, 
                 result_item.desync_offset.x or 0, result_item.desync_offset.y or 0, result_item.desync_offset.z or 0))
-            debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   Raw result %d type: %s", entity_index, hitbox_id, i, type(result_item)))
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   Raw result %d type: %s", entity_index, hitbox_id, i, type(result_item)))
             if result_item.angle_offset then
-                debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   Raw result %d angle_offset type: %s", entity_index, hitbox_id, i, type(result_item.angle_offset)))
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   Raw result %d angle_offset type: %s", entity_index, hitbox_id, i, type(result_item.angle_offset)))
             end
             if result_item.desync_magnitude then
-                debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   Raw result %d desync_magnitude type: %s", entity_index, hitbox_id, i, type(result_item.desync_magnitude)))
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   Raw result %d desync_magnitude type: %s", entity_index, hitbox_id, i, type(result_item.desync_magnitude)))
             end
             if result_item.desync_offset then
-                debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   Raw result %d desync_offset type: %s", entity_index, hitbox_id, i, type(result_item.desync_offset)))
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   Raw result %d desync_offset type: %s", entity_index, hitbox_id, i, type(result_item.desync_offset)))
             end
         end
-        debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Validation results count: %d", entity_index, hitbox_id, #validation_results))
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Validation results count: %d", entity_index, hitbox_id, #validation_results))
         if #validation_results > 0 then
             local first_result = validation_results[1]
-            debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | First result type: %s", entity_index, hitbox_id, type(first_result)))
-            debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | First result fields: %s", entity_index, hitbox_id, 
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | First result type: %s", entity_index, hitbox_id, type(first_result)))
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | First result fields: %s", entity_index, hitbox_id, 
                 table.concat({first_result.angle_offset and "angle_offset" or "", first_result.desync_magnitude and "desync_magnitude" or "", 
                              first_result.desync_offset and "desync_offset" or ""}, ", ")))
         end
@@ -1452,15 +1452,15 @@ function validate_hitbox_via_matrix(entity_index, hitbox_id, angle_offsets)
         return (a.desync_magnitude or 0) > (b.desync_magnitude or 0)
     end)
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Sorted validation results by desync magnitude", entity_index, hitbox_id))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Sorted validation results by desync magnitude", entity_index, hitbox_id))
         for i, result_item in ipairs(validation_results) do
-            debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Result %d: angle=%.1f, desync=%.2f", 
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Result %d: angle=%.1f, desync=%.2f", 
                 entity_index, hitbox_id, i, result_item.angle_offset or 0, result_item.desync_magnitude or 0))
         end
-        debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Post-sort validation results:", entity_index, hitbox_id))
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Post-sort validation results:", entity_index, hitbox_id))
         for i, result_item in ipairs(validation_results) do
-            debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   Post-sort result %d: angle=%.1f, desync=%.6f, offset=(%.6f,%.6f,%.6f)", 
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   Post-sort result %d: angle=%.1f, desync=%.6f, offset=(%.6f,%.6f,%.6f)", 
                 entity_index, hitbox_id, i, result_item.angle_offset or 0, result_item.desync_magnitude or 0, 
                 result_item.desync_offset.x or 0, result_item.desync_offset.y or 0, result_item.desync_offset.z or 0))
         end
@@ -1473,13 +1473,13 @@ function validate_hitbox_via_matrix(entity_index, hitbox_id, angle_offsets)
         total_results = #validation_results
     }
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Validation complete, best angle: %.1f, best desync: %.2f", entity_index, hitbox_id, result.best_angle or 0, result.best_desync or 0))
-        debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Final result object:", entity_index, hitbox_id))
-        debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   best_angle: %s (type: %s)", entity_index, hitbox_id, tostring(result.best_angle), type(result.best_angle)))
-        debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   best_desync: %s (type: %s)", entity_index, hitbox_id, tostring(result.best_desync), type(result.best_desync)))
-        debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   total_results: %s (type: %s)", entity_index, hitbox_id, tostring(result.total_results), type(result.total_results)))
-        debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   results count: %s (type: %s)", entity_index, hitbox_id, tostring(#result.results), type(result.results)))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Validation complete, best angle: %.1f, best desync: %.2f", entity_index, hitbox_id, result.best_angle or 0, result.best_desync or 0))
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Final result object:", entity_index, hitbox_id))
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   best_angle: %s (type: %s)", entity_index, hitbox_id, tostring(result.best_angle), type(result.best_angle)))
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   best_desync: %s (type: %s)", entity_index, hitbox_id, tostring(result.best_desync), type(result.best_desync)))
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   total_results: %s (type: %s)", entity_index, hitbox_id, tostring(result.total_results), type(result.total_results)))
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   results count: %s (type: %s)", entity_index, hitbox_id, tostring(#result.results), type(result.results)))
     end
     
     return result
@@ -1516,46 +1516,46 @@ end
 -- Система резольвинга через матрицу хитбоксов для максимальной точности
 
 function resolve_via_hitbox_matrix(entity_index, hitbox_id, base_desync, confidence)
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Base desync: %.2f | Confidence: %.2f | Starting matrix resolution...", entity_index, hitbox_id, base_desync or 0, confidence or 0))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Base desync: %.2f | Confidence: %.2f | Starting matrix resolution...", entity_index, hitbox_id, base_desync or 0, confidence or 0))
     end
     
     local hitbox_data = get_hitbox_matrix_precise(entity_index, hitbox_id)
     if not hitbox_data then 
-        if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-            debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Failed to get hitbox data, returning base values", entity_index, hitbox_id))
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Failed to get hitbox data, returning base values", entity_index, hitbox_id))
         end
         return base_desync, confidence 
     end
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Successfully got hitbox data", entity_index, hitbox_id))
-        debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Hitbox data type: %s", entity_index, hitbox_id, type(hitbox_data)))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Successfully got hitbox data", entity_index, hitbox_id))
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Hitbox data type: %s", entity_index, hitbox_id, type(hitbox_data)))
         if hitbox_data.matrix then
-            debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Hitbox matrix translation: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, 
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Hitbox matrix translation: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, 
                 hitbox_data.matrix.m[0][3] or 0, hitbox_data.matrix.m[1][3] or 0, hitbox_data.matrix.m[2][3] or 0))
-            debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Hitbox matrix type: %s", entity_index, hitbox_id, type(hitbox_data.matrix)))
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Hitbox matrix type: %s", entity_index, hitbox_id, type(hitbox_data.matrix)))
             if hitbox_data.matrix.m then
-                debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Hitbox matrix.m type: %s", entity_index, hitbox_id, type(hitbox_data.matrix.m)))
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Hitbox matrix.m type: %s", entity_index, hitbox_id, type(hitbox_data.matrix.m)))
             end
         end
         if hitbox_data.center_local then
-            debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Local center: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, 
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Local center: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, 
                 hitbox_data.center_local.x or 0, hitbox_data.center_local.y or 0, hitbox_data.center_local.z or 0))
-            debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Local center type: %s", entity_index, hitbox_id, type(hitbox_data.center_local)))
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Local center type: %s", entity_index, hitbox_id, type(hitbox_data.center_local)))
         end
         if hitbox_data.mins_local then
-            debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Local mins: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, 
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Local mins: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, 
                 hitbox_data.mins_local.x or 0, hitbox_data.mins_local.y or 0, hitbox_data.mins_local.z or 0))
         end
         if hitbox_data.maxs_local then
-            debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Local maxs: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, 
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Local maxs: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, 
                 hitbox_data.maxs_local.x or 0, hitbox_data.maxs_local.y or 0, hitbox_data.maxs_local.z or 0))
         end
     end
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Got hitbox data, analyzing angles...", entity_index, hitbox_id))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Got hitbox data, analyzing angles...", entity_index, hitbox_id))
     end
     
     -- Анализируем различные углы десинка - увеличенные для лучшего обнаружения
@@ -1563,57 +1563,57 @@ function resolve_via_hitbox_matrix(entity_index, hitbox_id, base_desync, confide
     local validation = validate_hitbox_via_matrix(entity_index, hitbox_id, test_angles)
     
     if not validation then 
-        if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-            debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Failed to validate hitbox, returning base values", entity_index, hitbox_id))
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Failed to validate hitbox, returning base values", entity_index, hitbox_id))
         end
         return base_desync, confidence 
     end
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Successfully validated hitbox", entity_index, hitbox_id))
-        debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Validation object: %s", entity_index, hitbox_id, tostring(validation)))
-        debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Validation object type: %s", entity_index, hitbox_id, type(validation)))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Successfully validated hitbox", entity_index, hitbox_id))
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Validation object: %s", entity_index, hitbox_id, tostring(validation)))
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Validation object type: %s", entity_index, hitbox_id, type(validation)))
         if validation.best_desync then
-            debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Best desync: %.6f", entity_index, hitbox_id, validation.best_desync or 0))
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Best desync: %.6f", entity_index, hitbox_id, validation.best_desync or 0))
         end
         if validation.best_angle then
-            debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Best angle: %.1f", entity_index, hitbox_id, validation.best_angle or 0))
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Best angle: %.1f", entity_index, hitbox_id, validation.best_angle or 0))
         end
         if validation.best_desync_offset then
-            debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Best desync offset: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, 
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Best desync offset: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, 
                 validation.best_desync_offset.x or 0, validation.best_desync_offset.y or 0, validation.best_desync_offset.z or 0))
         end
-        debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Validation fields: %s", entity_index, hitbox_id, 
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Validation fields: %s", entity_index, hitbox_id, 
             table.concat({validation.best_desync and "best_desync" or "", validation.best_angle and "best_angle" or "", 
                          validation.best_desync_offset and "best_desync_offset" or ""}, ", ")))
     end
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Successfully validated hitbox", entity_index, hitbox_id))
-        debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Validation object: %s", entity_index, hitbox_id, tostring(validation)))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Successfully validated hitbox", entity_index, hitbox_id))
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Validation object: %s", entity_index, hitbox_id, tostring(validation)))
         if validation.best_desync then
-            debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Best desync: %.6f", entity_index, hitbox_id, validation.best_desync or 0))
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Best desync: %.6f", entity_index, hitbox_id, validation.best_desync or 0))
         end
         if validation.best_angle then
-            debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Best angle: %.1f", entity_index, hitbox_id, validation.best_angle or 0))
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Best angle: %.1f", entity_index, hitbox_id, validation.best_angle or 0))
         end
     end
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Validation successful, calculating correction...", entity_index, hitbox_id))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Validation successful, calculating correction...", entity_index, hitbox_id))
     end
     
     -- Находим лучший угол на основе анализа хитбокса
     local best_angle = validation.best_angle
     local best_desync = validation.best_desync
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Best angle: %.1f | Best desync: %.2f", entity_index, hitbox_id, best_angle or 0, best_desync or 0))
-        debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Validation object: %s", entity_index, hitbox_id, tostring(validation)))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Best angle: %.1f | Best desync: %.2f", entity_index, hitbox_id, best_angle or 0, best_desync or 0))
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Validation object: %s", entity_index, hitbox_id, tostring(validation)))
         if validation.results then
-            debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Validation results count: %d", entity_index, hitbox_id, #validation.results))
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Validation results count: %d", entity_index, hitbox_id, #validation.results))
             for i, result in ipairs(validation.results) do
-                debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Result %d: angle=%.1f, desync=%.6f", 
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Result %d: angle=%.1f, desync=%.6f", 
                     entity_index, hitbox_id, i, result.angle_offset or 0, result.desync_magnitude or 0))
             end
         end
@@ -1622,34 +1622,34 @@ function resolve_via_hitbox_matrix(entity_index, hitbox_id, base_desync, confide
     -- Корректируем базовый десинк на основе анализа матрицы
     local matrix_correction = (best_desync or 0) * (confidence or 0.5)
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Matrix correction calculation: %.6f * %.6f = %.6f", entity_index, hitbox_id, best_desync or 0, confidence or 0.5, matrix_correction))
-        debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Matrix correction type: %s", entity_index, hitbox_id, type(matrix_correction)))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Matrix correction calculation: %.6f * %.6f = %.6f", entity_index, hitbox_id, best_desync or 0, confidence or 0.5, matrix_correction))
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Matrix correction type: %s", entity_index, hitbox_id, type(matrix_correction)))
     end
     
     -- Ensure matrix correction has a minimum meaningful value
     if math.abs(matrix_correction) < 0.001 then
         matrix_correction = 0.001 * (matrix_correction >= 0 and 1 or -1)
-        if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-            debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Matrix correction too small (%.6f), applying minimum threshold: %.6f", entity_index, hitbox_id, matrix_correction, matrix_correction))
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Matrix correction too small (%.6f), applying minimum threshold: %.6f", entity_index, hitbox_id, matrix_correction, matrix_correction))
         end
     end
     
     local corrected_desync = (base_desync or 0) + matrix_correction
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Raw values - best_desync: %.6f, confidence: %.6f, base_desync: %.6f", entity_index, hitbox_id, best_desync or 0, confidence or 0.5, base_desync or 0))
-        debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Matrix correction calculation: (%.6f * %.6f) = %.6f", entity_index, hitbox_id, best_desync or 0, confidence or 0.5, matrix_correction))
-        debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Corrected desync calculation: (%.6f + %.6f) = %.6f", entity_index, hitbox_id, base_desync or 0, matrix_correction, corrected_desync))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Raw values - best_desync: %.6f, confidence: %.6f, base_desync: %.6f", entity_index, hitbox_id, best_desync or 0, confidence or 0.5, base_desync or 0))
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Matrix correction calculation: (%.6f * %.6f) = %.6f", entity_index, hitbox_id, best_desync or 0, confidence or 0.5, matrix_correction))
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Corrected desync calculation: (%.6f + %.6f) = %.6f", entity_index, hitbox_id, base_desync or 0, matrix_correction, corrected_desync))
     end
     
     -- Улучшаем уверенность на основе качества анализа
     local matrix_confidence = math.min(1.0, (confidence or 0) + ((validation.total_results or 0) / #test_angles) * 0.2)
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Matrix confidence calculation: min(1.0, %.2f + (%.2f / %d) * 0.2) = %.2f", entity_index, hitbox_id, confidence or 0, validation.total_results or 0, #test_angles, matrix_confidence))
-        debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Matrix correction: %.2f | Corrected desync: %.2f | Matrix confidence: %.2f", entity_index, hitbox_id, matrix_correction, corrected_desync, matrix_confidence))
-        debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Final return values: corrected_desync=%.6f (type: %s), matrix_confidence=%.6f (type: %s)", entity_index, hitbox_id, corrected_desync, type(corrected_desync), matrix_confidence, type(matrix_confidence)))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Matrix confidence calculation: min(1.0, %.2f + (%.2f / %d) * 0.2) = %.2f", entity_index, hitbox_id, confidence or 0, validation.total_results or 0, #test_angles, matrix_confidence))
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Matrix correction: %.2f | Corrected desync: %.2f | Matrix confidence: %.2f", entity_index, hitbox_id, matrix_correction, corrected_desync, matrix_confidence))
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Final return values: corrected_desync=%.6f (type: %s), matrix_confidence=%.6f (type: %s)", entity_index, hitbox_id, corrected_desync, type(corrected_desync), matrix_confidence, type(matrix_confidence)))
     end
     
     return corrected_desync, matrix_confidence
@@ -1659,32 +1659,32 @@ end
 function integrate_hitbox_matrix_resolving(entity_index, base_desync, confidence, hitbox_id)
     hitbox_id = hitbox_id or 0 -- По умолчанию используем голову
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Base desync: %.2f | Confidence: %.2f | Starting integration...", entity_index, hitbox_id, base_desync or 0, confidence or 0))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Base desync: %.2f | Confidence: %.2f | Starting integration...", entity_index, hitbox_id, base_desync or 0, confidence or 0))
     end
     
     -- Получаем анализ через матрицу хитбоксов
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Calling resolve_via_hitbox_matrix with: base_desync=%.6f (type: %s), confidence=%.6f (type: %s)", entity_index, hitbox_id, base_desync or 0, type(base_desync), confidence or 0, type(confidence)))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Calling resolve_via_hitbox_matrix with: base_desync=%.6f (type: %s), confidence=%.6f (type: %s)", entity_index, hitbox_id, base_desync or 0, type(base_desync), confidence or 0, type(confidence)))
     end
     local matrix_desync, matrix_confidence = resolve_via_hitbox_matrix(entity_index, hitbox_id, base_desync, confidence)
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Matrix desync: %.2f | Matrix confidence: %.2f", entity_index, hitbox_id, matrix_desync or 0, matrix_confidence or 0))
-        debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Matrix desync type: %s | Matrix confidence type: %s", entity_index, hitbox_id, type(matrix_desync), type(matrix_confidence)))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Matrix desync: %.2f | Matrix confidence: %.2f", entity_index, hitbox_id, matrix_desync or 0, matrix_confidence or 0))
+# debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Matrix desync type: %s | Matrix confidence type: %s", entity_index, hitbox_id, type(matrix_desync), type(matrix_confidence)))
     end
     
     -- Предсказываем будущую позицию хитбокса
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Calling predict_hitbox_for_resolving with: entity_index=%s, hitbox_id=%s, time=0.1", entity_index, hitbox_id, tostring(entity_index), tostring(hitbox_id)))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Calling predict_hitbox_for_resolving with: entity_index=%s, hitbox_id=%s, time=0.1", entity_index, hitbox_id, tostring(entity_index), tostring(hitbox_id)))
     end
     local prediction = predict_hitbox_for_resolving(entity_index, hitbox_id, 0.1) -- 100ms вперед
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Prediction result: %s", entity_index, hitbox_id, tostring(prediction)))
-        debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Prediction type: %s", entity_index, hitbox_id, type(prediction)))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Prediction result: %s", entity_index, hitbox_id, tostring(prediction)))
+# debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Prediction type: %s", entity_index, hitbox_id, type(prediction)))
         if prediction then
-            debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Prediction details - current:(%.2f,%.2f,%.2f) predicted:(%.2f,%.2f,%.2f)", 
+# debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Prediction details - current:(%.2f,%.2f,%.2f) predicted:(%.2f,%.2f,%.2f)", 
                 entity_index, hitbox_id,
                 prediction.current_center.x or 0, prediction.current_center.y or 0, prediction.current_center.z or 0,
                 prediction.predicted_center.x or 0, prediction.predicted_center.y or 0, prediction.predicted_center.z or 0))
@@ -1700,15 +1700,15 @@ function integrate_hitbox_matrix_resolving(entity_index, base_desync, confidence
         final_desync = final_desync + (prediction_correction * 0.3)
         final_confidence = math.min(1.0, final_confidence + 0.1)
         
-        if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-            debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Prediction correction calculation: (%.2f - %.2f) = %.2f", entity_index, hitbox_id, prediction.predicted_center.x or 0, prediction.current_center.x or 0, prediction_correction))
-            debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Applied prediction correction: %.2f", entity_index, hitbox_id, prediction_correction))
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Prediction correction calculation: (%.2f - %.2f) = %.2f", entity_index, hitbox_id, prediction.predicted_center.x or 0, prediction.current_center.x or 0, prediction_correction))
+# debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Applied prediction correction: %.2f", entity_index, hitbox_id, prediction_correction))
         end
     end
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Final desync: %.2f | Final confidence: %.2f", entity_index, hitbox_id, final_desync, final_confidence))
-        debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Final desync type: %s | Final confidence type: %s", entity_index, hitbox_id, type(final_desync), type(final_confidence)))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Final desync: %.2f | Final confidence: %.2f", entity_index, hitbox_id, final_desync, final_confidence))
+# debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Final desync type: %s | Final confidence type: %s", entity_index, hitbox_id, type(final_desync), type(final_confidence)))
     end
     
     local result = {
@@ -1719,13 +1719,13 @@ function integrate_hitbox_matrix_resolving(entity_index, base_desync, confidence
         prediction = prediction
     }
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Final result object:", entity_index, hitbox_id))
-        debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   desync: %s (type: %s)", entity_index, hitbox_id, tostring(result.desync), type(result.desync)))
-        debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   confidence: %s (type: %s)", entity_index, hitbox_id, tostring(result.confidence), type(result.confidence)))
-        debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   matrix_analysis: %s (type: %s)", entity_index, hitbox_id, tostring(result.matrix_analysis), type(result.matrix_analysis)))
-        debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   hitbox_id: %s (type: %s)", entity_index, hitbox_id, tostring(result.hitbox_id), type(result.hitbox_id)))
-        debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   prediction: %s (type: %s)", entity_index, hitbox_id, tostring(result.prediction), type(result.prediction)))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Final result object:", entity_index, hitbox_id))
+# debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   desync: %s (type: %s)", entity_index, hitbox_id, tostring(result.desync), type(result.desync)))
+# debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   confidence: %s (type: %s)", entity_index, hitbox_id, tostring(result.confidence), type(result.confidence)))
+# debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   matrix_analysis: %s (type: %s)", entity_index, hitbox_id, tostring(result.matrix_analysis), type(result.matrix_analysis)))
+# debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   hitbox_id: %s (type: %s)", entity_index, hitbox_id, tostring(result.hitbox_id), type(result.hitbox_id)))
+# debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   prediction: %s (type: %s)", entity_index, hitbox_id, tostring(result.prediction), type(result.prediction)))
     end
     
     return result
@@ -1922,14 +1922,14 @@ end
 
 -- Система предсказания хитбоксов для резольвинга
 function predict_hitbox_for_resolving(entity_index, hitbox_id, time_ahead)
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Time ahead: %.2f | Starting prediction...", entity_index, hitbox_id, time_ahead))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Time ahead: %.2f | Starting prediction...", entity_index, hitbox_id, time_ahead))
     end
     
     local entity = entity_index
     if not entity then 
-        if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-            debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Entity is nil", entity_index, hitbox_id))
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Entity is nil", entity_index, hitbox_id))
         end
         return nil 
     end
@@ -1939,105 +1939,105 @@ function predict_hitbox_for_resolving(entity_index, hitbox_id, time_ahead)
     local velocity_y = entity_get_prop(entity, "m_vecVelocity[1]") or 0
     local velocity_z = entity_get_prop(entity, "m_vecVelocity[2]") or 0
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Raw velocity components: x=%.6f, y=%.6f, z=%.6f", entity_index, hitbox_id, velocity_x, velocity_y, velocity_z))
-        debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Velocity magnitude: %.6f", entity_index, hitbox_id, math.sqrt(velocity_x^2 + velocity_y^2 + velocity_z^2)))
-        debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Velocity calculation: sqrt(%.6f^2 + %.6f^2 + %.6f^2) = %.6f", entity_index, hitbox_id, 
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Raw velocity components: x=%.6f, y=%.6f, z=%.6f", entity_index, hitbox_id, velocity_x, velocity_y, velocity_z))
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Velocity magnitude: %.6f", entity_index, hitbox_id, math.sqrt(velocity_x^2 + velocity_y^2 + velocity_z^2)))
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Velocity calculation: sqrt(%.6f^2 + %.6f^2 + %.6f^2) = %.6f", entity_index, hitbox_id, 
             velocity_x, velocity_y, velocity_z, math.sqrt(velocity_x^2 + velocity_y^2 + velocity_z^2)))
     end
     
     local velocity = {x = velocity_x, y = velocity_y, z = velocity_z}
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Constructed velocity vector: %s", entity_index, hitbox_id, tostring(velocity)))
-        debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Velocity vector type: %s", entity_index, hitbox_id, type(velocity)))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Constructed velocity vector: %s", entity_index, hitbox_id, tostring(velocity)))
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Velocity vector type: %s", entity_index, hitbox_id, type(velocity)))
     end
     
     if velocity_x == 0 and velocity_y == 0 and velocity_z == 0 then
-        if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-            debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Zero velocity detected", entity_index, hitbox_id))
-            debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Velocity components: x=%.6f, y=%.6f, z=%.6f", entity_index, hitbox_id, velocity_x, velocity_y, velocity_z))
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Zero velocity detected", entity_index, hitbox_id))
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Velocity components: x=%.6f, y=%.6f, z=%.6f", entity_index, hitbox_id, velocity_x, velocity_y, velocity_z))
         end
         return nil
     end
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Non-zero velocity confirmed, proceeding with prediction", entity_index, hitbox_id))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Non-zero velocity confirmed, proceeding with prediction", entity_index, hitbox_id))
     end
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Got velocity: (%.6f,%.6f,%.6f), calling predict_hitbox_via_matrix...", entity_index, hitbox_id, velocity.x or 0, velocity.y or 0, velocity.z or 0))
-        debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Time ahead: %.6f, velocity magnitude: %.6f", entity_index, hitbox_id, time_ahead, math.sqrt((velocity.x or 0)^2 + (velocity.y or 0)^2 + (velocity.z or 0)^2)))
-        debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Parameters for predict_hitbox_via_matrix: entity_index=%s, hitbox_id=%d, time_ahead=%.6f", entity_index, hitbox_id, tostring(entity_index), hitbox_id, time_ahead))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Got velocity: (%.6f,%.6f,%.6f), calling predict_hitbox_via_matrix...", entity_index, hitbox_id, velocity.x or 0, velocity.y or 0, velocity.z or 0))
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Time ahead: %.6f, velocity magnitude: %.6f", entity_index, hitbox_id, time_ahead, math.sqrt((velocity.x or 0)^2 + (velocity.y or 0)^2 + (velocity.z or 0)^2)))
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Parameters for predict_hitbox_via_matrix: entity_index=%s, hitbox_id=%d, time_ahead=%.6f", entity_index, hitbox_id, tostring(entity_index), hitbox_id, time_ahead))
     end
     
     local prediction = predict_hitbox_via_matrix(entity_index, hitbox_id, time_ahead, velocity)
     if not prediction then 
-            if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | predict_hitbox_via_matrix returned nil", entity_index, hitbox_id))
-        debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Parameters passed: time_ahead=%.6f, velocity=(%.6f,%.6f,%.6f)", entity_index, hitbox_id, 
+            if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | predict_hitbox_via_matrix returned nil", entity_index, hitbox_id))
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Parameters passed: time_ahead=%.6f, velocity=(%.6f,%.6f,%.6f)", entity_index, hitbox_id, 
             time_ahead, velocity.x or 0, velocity.y or 0, velocity.z or 0))
-        debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Velocity type: %s, time_ahead type: %s", entity_index, hitbox_id, type(velocity), type(time_ahead)))
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Velocity type: %s, time_ahead type: %s", entity_index, hitbox_id, type(velocity), type(time_ahead)))
     end
         return nil 
     end
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | predict_hitbox_via_matrix returned prediction object: %s", entity_index, hitbox_id, tostring(prediction)))
-        debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Prediction object type: %s", entity_index, hitbox_id, type(prediction)))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | predict_hitbox_via_matrix returned prediction object: %s", entity_index, hitbox_id, tostring(prediction)))
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Prediction object type: %s", entity_index, hitbox_id, type(prediction)))
         if prediction.current_center and prediction.predicted_center then
-            debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Prediction contains both current and predicted centers", entity_index, hitbox_id))
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Prediction contains both current and predicted centers", entity_index, hitbox_id))
         end
         if prediction.current_center then
-            debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Current center type: %s", entity_index, hitbox_id, type(prediction.current_center)))
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Current center type: %s", entity_index, hitbox_id, type(prediction.current_center)))
         end
         if prediction.predicted_center then
-            debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Predicted center type: %s", entity_index, hitbox_id, type(prediction.predicted_center)))
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Predicted center type: %s", entity_index, hitbox_id, type(prediction.predicted_center)))
         end
     end
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Successfully got prediction", entity_index, hitbox_id))
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Successfully got prediction", entity_index, hitbox_id))
         if prediction.current_center then
-            debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Current center: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, 
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Current center: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, 
                 prediction.current_center.x or 0, prediction.current_center.y or 0, prediction.current_center.z or 0))
         end
         if prediction.predicted_center then
-            debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Predicted center: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, 
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Predicted center: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, 
                 prediction.predicted_center.x or 0, prediction.predicted_center.y or 0, prediction.predicted_center.z or 0))
         end
         if prediction.predicted_mins then
-            debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Predicted mins: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, 
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Predicted mins: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, 
                 prediction.predicted_mins.x or 0, prediction.predicted_mins.y or 0, prediction.predicted_mins.z or 0))
         end
         if prediction.predicted_maxs then
-            debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Predicted maxs: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, 
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Predicted maxs: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, 
                 prediction.predicted_maxs.x or 0, prediction.predicted_maxs.y or 0, prediction.predicted_maxs.z or 0))
         end
     end
     
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Returning prediction result with %d fields", entity_index, hitbox_id, 
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Returning prediction result with %d fields", entity_index, hitbox_id, 
             (prediction.current_center and 1 or 0) + (prediction.predicted_center and 1 or 0) + (prediction.predicted_mins and 1 or 0) + (prediction.predicted_maxs and 1 or 0) + 4))
-        debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Final prediction object summary:", entity_index, hitbox_id))
-        debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d |   Has current_center: %s", entity_index, hitbox_id, tostring(prediction.current_center ~= nil)))
-        debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d |   Has predicted_center: %s", entity_index, hitbox_id, tostring(prediction.predicted_center ~= nil)))
-        debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d |   Has predicted_mins: %s", entity_index, hitbox_id, tostring(prediction.predicted_mins ~= nil)))
-        debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d |   Has predicted_maxs: %s", entity_index, hitbox_id, tostring(prediction.predicted_maxs ~= nil)))
-        debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d |   Has prediction_time: %s", entity_index, hitbox_id, tostring(prediction.prediction_time ~= nil)))
-                debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d |   Has velocity: %s", entity_index, hitbox_id, tostring(prediction.velocity ~= nil)))
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Final prediction object summary:", entity_index, hitbox_id))
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d |   Has current_center: %s", entity_index, hitbox_id, tostring(prediction.current_center ~= nil)))
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d |   Has predicted_center: %s", entity_index, hitbox_id, tostring(prediction.predicted_center ~= nil)))
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d |   Has predicted_mins: %s", entity_index, hitbox_id, tostring(prediction.predicted_mins ~= nil)))
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d |   Has predicted_maxs: %s", entity_index, hitbox_id, tostring(prediction.predicted_maxs ~= nil)))
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d |   Has prediction_time: %s", entity_index, hitbox_id, tostring(prediction.prediction_time ~= nil)))
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d |   Has velocity: %s", entity_index, hitbox_id, tostring(prediction.velocity ~= nil)))
         if prediction.current_center then
-            debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Current center values: x=%.6f, y=%.6f, z=%.6f", entity_index, hitbox_id,
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Current center values: x=%.6f, y=%.6f, z=%.6f", entity_index, hitbox_id,
                 prediction.current_center.x or 0, prediction.current_center.y or 0, prediction.current_center.z or 0))
-            debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Current center type: %s", entity_index, hitbox_id, type(prediction.current_center)))
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Current center type: %s", entity_index, hitbox_id, type(prediction.current_center)))
         end
         if prediction.predicted_center then
-            debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Predicted center values: x=%.6f, y=%.6f, z=%.6f", entity_index, hitbox_id,
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Predicted center values: x=%.6f, y=%.6f, z=%.6f", entity_index, hitbox_id,
                 prediction.predicted_center.x or 0, prediction.predicted_center.y or 0, prediction.predicted_center.z or 0))
-            debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Predicted center type: %s", entity_index, hitbox_id, type(prediction.predicted_center)))
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Predicted center type: %s", entity_index, hitbox_id, type(prediction.predicted_center)))
         end
         if prediction.velocity then
-            debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Velocity type: %s", entity_index, hitbox_id, type(prediction.velocity)))
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Velocity type: %s", entity_index, hitbox_id, type(prediction.velocity)))
         end
     end
     
@@ -3961,8 +3961,8 @@ function riptide_correction(animlayers, velocity, player_state, quantum_state, n
             correction_result.hitbox_matrix_prediction = matrix_resolution.prediction
             
                                         -- Debug логирование для матрицы хитбоксов
-                            if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-                debug_log(string.format(
+                            if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format(
                     "[HITBOX-MATRIX] Correction: %.2f | Confidence: %.2f | Final Desync: %.2f",
                     matrix_correction,
                     matrix_resolution.confidence,
@@ -4075,7 +4075,7 @@ function riptide_correction(animlayers, velocity, player_state, quantum_state, n
     
     -- === FAKE LAG DEBUG LOGGING ===
     if riptide_v5_debug and ui.get(riptide_v5_debug) and correction_result.fake_lag_compensation > 0 then
-        debug_log(string.format(
+# debug_log(string.format(
             "[RIPTIDE-FAKELAG] Compensation: %.2f | Type: %s | Confidence: %.2f | Final Desync: %.2f",
             correction_result.fake_lag_compensation,
             correction_result.fake_lag_type,
@@ -4321,15 +4321,8 @@ end
 
 -- === DEBUG SYSTEM STATUS ===
 local function debug_system_status()
-    debug_log("[SYSTEM-CHECK] ===== RESOLVER SYSTEM STATUS =====")
-            debug_log("[SYSTEM-CHECK] UI Elements: riptide_v5_debug initialized correctly")
-    debug_log("[SYSTEM-CHECK] Markov Chain: Safe initialization implemented")
-    debug_log("[SYSTEM-CHECK] Neural Networks: Ready for learning")
-    debug_log("[SYSTEM-CHECK] 4D Mathematics: Tensor operations active")
-    debug_log("[SYSTEM-CHECK] Machine Learning: Pattern recognition online")
-    debug_log("[SYSTEM-CHECK] Backtrack Analysis: Enhanced v2 system ready")
-    debug_log("[SYSTEM-CHECK] All critical systems operational ✓")
-    debug_log("[SYSTEM-CHECK] ===================================")
+    -- Отключено для уменьшения спама в логах
+    -- debug_log("[SYSTEM-CHECK] Resolver system operational")
 end
 
 -- Initialize system status check
@@ -4542,26 +4535,13 @@ local function analyze_movement_layers(layers, velocity_data, player_state)
             signed_desync = signed_desync + riptide_result.prediction_enhancement * 0.4
         end
         
-        -- === ЛОГИРОВАНИЕ РЕВОЛЮЦИОННОЙ RIPTIDE V5 СИСТЕМЫ ===
-        if riptide_result.riptide_factor > 0.20 then -- Снижен порог для V5
-            debug_log(string.format(
-                "[RIPTIDE-V5-REVOLUTION] 🚀 F: %.2f | Orig: %.1f° | Adj: %.1f° | Final: %.1f° | Conf: %.2f | Enhanced Neural: %.1f | ML: %.1f | Quantum: %.1f | AI: %.1f | Analytics: %.1f | Weapon: %.1f | Map: %.1f | Neural Conf: %.2f | Dropout: %.2f | Meta: %.1f | Evolution: %.2f",
+        -- === ЛОГИРОВАНИЕ RIPTIDE V5 ===
+        if riptide_result.riptide_factor > 0.50 then -- Повышен порог для логирования
+# debug_log(string.format(
+                "[RIPTIDE-V5] F: %.2f | Desync: %.1f° | Conf: %.2f",
                 riptide_result.riptide_factor,
-                math.abs(smoothed_desync),
-                riptide_adjustment,
                 signed_desync,
-                riptide_result.confidence or 0,
-                riptide_result.enhanced_neural_network_prediction or 0,
-                riptide_result.machine_learning_adjustment or 0,
-                riptide_result.quantum_entanglement_fix or 0,
-                riptide_result.ai_pattern_recognition or 0,
-                riptide_result.predictive_analytics_boost or 0,
-                riptide_result.weapon_specific_analysis or 0,
-                riptide_result.map_aware_freestand or 0,
-                riptide_result.enhanced_neural_confidence or 0,
-                riptide_result.adaptive_dropout or 0,
-                riptide_result.meta_learning_enhancement or 0,
-                riptide_result.algorithmic_evolution_score or 0
+                riptide_result.confidence or 0
             ))
         end
         
@@ -6412,7 +6392,7 @@ local function analyze_backtrack_records(entity_index)
                 )
             end
             
-            debug_log(string.format(
+# debug_log(string.format(
                 "[BACKTRACK-V5-ANALYSIS] Entity: %d | Score: %.0f | 4D: %.0f | ML: %.0f | Weapon: %s | RF: %.2f | Enhanced Neural: %.1f | ML: %.1f | Quantum: %.1f | AI: %.1f | Analytics: %.1f | Weapon: %.1f | Map: %.1f | Neural Conf: %.2f | Dropout: %.2f | Meta: %.1f | Evolution: %.2f%s",
                 entity_index,
                 best_record.enhanced_score,
@@ -6439,7 +6419,7 @@ local function analyze_backtrack_records(entity_index)
     -- УЛУЧШЕННОЕ логирование результата
     if best_record then
         local player_name = entity_get_player_name(entity_index)
-        debug_log(string.format(
+# debug_log(string.format(
             "[BACKTRACK-IMPROVED] %s | Score: %.0f | Pattern: %s | Intensity: %.1f | Time: %.3fs",
             player_name or "Unknown",
             best_score,
@@ -6824,7 +6804,7 @@ function get_best_backtrack_record(entity_index)
                 -- Store matrix data for later use
                 candidate.hitbox_matrix_data = matrix_analysis
                 
-                debug_log(string.format(
+# debug_log(string.format(
                     "[BT-MATRIX] Record %d | Matrix Confidence: %.2f | Boost: +%.0f | Final Score: %.0f",
                     i,
                     matrix_analysis.confidence,
@@ -6866,7 +6846,7 @@ function get_best_backtrack_record(entity_index)
         -- Re-sort with adjusted scores
         table.sort(candidate_records, function(a, b) return a.score > b.score end)
         
-        debug_log(string.format(
+# debug_log(string.format(
             "[BT-FAKELAG] Detected: %s | Type: %s | Confidence: %.2f | Adjusted scores",
             fake_lag_analysis.is_fake_lagging and "YES" or "NO",
             fake_lag_analysis.manipulation_type,
@@ -6885,7 +6865,7 @@ function get_best_backtrack_record(entity_index)
     if player_metrics and player_metrics.accuracy > 0.8 and #candidate_records > 1 then
         if math.random() < 0.3 then  -- 30% chance
             selected_record = candidate_records[2].record
-            debug_log("[BT-ADAPTIVE] Using second-best record for unpredictability")
+# debug_log("[BT-ADAPTIVE] Using second-best record for unpredictability")
         end
     end
     
@@ -6960,10 +6940,10 @@ function get_best_backtrack_record(entity_index)
             debug_info = debug_info .. matrix_info
         end
         
-        debug_log(debug_info)
+# debug_log(debug_info)
         return selected_record
     else
-        debug_log("[BT-REJECTED] " .. table.concat(validation_reasons, ", "))
+# debug_log("[BT-REJECTED] " .. table.concat(validation_reasons, ", "))
         return nil
     end
 end
@@ -6977,7 +6957,7 @@ function apply_backtrack_to_target(entity_index, record)
     local prev_record = lag_records[entity_index] and lag_records[entity_index][2]
     local validity = validate_backtrack_record(entity_index, record, prev_record)
     if not validity.valid then
-        debug_log("[BT-SKIP] Invalid record: " .. table.concat(validity.reasons or {}, ", "))
+# debug_log("[BT-SKIP] Invalid record: " .. table.concat(validity.reasons or {}, ", "))
         return false
     end
 
@@ -7007,7 +6987,7 @@ function apply_backtrack_to_target(entity_index, record)
                 local matrix_prediction = predict_hitbox_via_matrix(entity_index, 0, prediction_horizon, record.velocity)
                 if matrix_prediction and matrix_prediction.position then
                     final_position = matrix_prediction.position
-                    debug_log(string.format("[BT-MATRIX-INTERP] Matrix prediction: %.3fs | Position: (%.1f, %.1f, %.1f)", 
+# debug_log(string.format("[BT-MATRIX-INTERP] Matrix prediction: %.3fs | Position: (%.1f, %.1f, %.1f)", 
                         prediction_horizon, final_position.x, final_position.y, final_position.z))
                 else
                     -- Fallback to traditional interpolation
@@ -7033,7 +7013,7 @@ function apply_backtrack_to_target(entity_index, record)
                 final_position = predicted
             end
             
-            debug_log(string.format("[BT-INTERP] Interpolated position by %.3fs (lat: %.3f, choke: %.2f)", prediction_horizon, avg_latency, choke))
+# debug_log(string.format("[BT-INTERP] Interpolated position by %.3fs (lat: %.3f, choke: %.2f)", prediction_horizon, avg_latency, choke))
         end
     end
     
@@ -7043,7 +7023,7 @@ function apply_backtrack_to_target(entity_index, record)
     end)
     
     if not pos_success then
-        debug_log("[BT-ERROR] Failed to set position")
+# debug_log("[BT-ERROR] Failed to set position")
         success = false
     end
     
@@ -7066,7 +7046,7 @@ function apply_backtrack_to_target(entity_index, record)
         end)
         
         if not angle_success then
-            debug_log("[BT-ERROR] Failed to set angles")
+# debug_log("[BT-ERROR] Failed to set angles")
             success = false
         end
     end
@@ -7078,7 +7058,7 @@ function apply_backtrack_to_target(entity_index, record)
         end)
         
         if not sim_success then
-            debug_log("[BT-ERROR] Failed to set simulation time")
+# debug_log("[BT-ERROR] Failed to set simulation time")
             success = false
         end
     end
@@ -7103,7 +7083,7 @@ function apply_backtrack_to_target(entity_index, record)
                 end)
                 
                 if not layer_success then
-                    debug_log("[BT-ERROR] Failed to set animation layer " .. i)
+# debug_log("[BT-ERROR] Failed to set animation layer " .. i)
                 end
             end
         end
@@ -7118,7 +7098,7 @@ function apply_backtrack_to_target(entity_index, record)
         end)
         
         if not vel_success then
-            debug_log("[BT-ERROR] Failed to set velocity")
+# debug_log("[BT-ERROR] Failed to set velocity")
         end
     end
     
@@ -7132,7 +7112,7 @@ function apply_backtrack_to_target(entity_index, record)
         end)
         
         if not duck_success then
-            debug_log("[BT-ERROR] Failed to set duck state")
+# debug_log("[BT-ERROR] Failed to set duck state")
         end
     end
     
@@ -7162,7 +7142,7 @@ function apply_backtrack_to_target(entity_index, record)
                 
                 if pos_success then
                     final_position = corrected_position
-                    debug_log(string.format(
+# debug_log(string.format(
                         "[BT-MATRIX] Applied matrix correction: %.2f (confidence: %.2f)",
                         matrix_correction,
                         matrix_confidence
@@ -7267,7 +7247,7 @@ function update_backtrack_learning(entity_index, shot_hit, record_used)
             -- Update score threshold
             metrics.preferred_score_threshold = (metrics.preferred_score_threshold * 0.8) + (score * 0.2)
             
-            debug_log(string.format(
+# debug_log(string.format(
                 "[BT-LEARN] Hit! Time: %.3fs Score: %.1f | New range: %.3f-%.3f",
                 time_diff, score, metrics.best_time_range.min, metrics.best_time_range.max
             ))
@@ -7364,7 +7344,7 @@ function update_backtrack_learning(entity_index, shot_hit, record_used)
         
         -- Debug logging for matrix learning
         if riptide_v5_debug and ui.get(riptide_v5_debug) then
-            debug_log(string.format(
+# debug_log(string.format(
                 "[BT-MATRIX-LEARNING] Entity: %s | Matrix Success Rate: %.2f | Confidence Correlation: %.2f | Accuracy Trend: %.2f | Reliability: %.2f",
                 entity_get_player_name(entity_index) or "Unknown",
                 matrix_learning.matrix_success_rate,
@@ -7402,7 +7382,7 @@ function process_backtrack(entity_index)
                                 local score = calculate_advanced_backtrack_score(record, entity_index)
                                 if score > metrics.preferred_score_threshold * 0.8 then
                                     best_record = record
-                                    debug_log("[BT-ADAPTIVE] Using learned optimal record")
+# debug_log("[BT-ADAPTIVE] Using learned optimal record")
                                     break
                                 end
                             end
@@ -7488,7 +7468,7 @@ function process_backtrack(entity_index)
                 backtrack_intensity = backtrack_intensity * 0.8  -- Reduce for low confidence
             end
             
-            debug_log(string.format(
+# debug_log(string.format(
                 "[BT-MATRIX-PROCESS] Matrix Confidence: %.2f | Adjusted Intensity: %.2f",
                 matrix_analysis.confidence,
                 backtrack_intensity
@@ -7526,7 +7506,7 @@ function process_backtrack(entity_index)
             -- Если Riptide фактор слишком высок и стабильность низкая, это может быть ненадежно
             if riptide_factor > 0.8 and temporal_stability < 0.3 then
                 validation_passed = false
-                debug_log(string.format(
+# debug_log(string.format(
                     "[BACKTRACK-V3-WARN] %s | High Riptide factor with low stability: R=%.2f T=%.2f",
                     player_name, riptide_factor, temporal_stability
                 ))
@@ -7535,7 +7515,7 @@ function process_backtrack(entity_index)
             -- V5 дополнительные проверки
             -- Если нейросетевое предсказание слишком экстремальное
             if math_abs(neural_prediction) > 50 then
-                debug_log(string.format(
+# debug_log(string.format(
                     "[BACKTRACK-V5-WARN] %s | Extreme neural prediction: %.1f",
                     player_name, neural_prediction
                 ))
@@ -7543,7 +7523,7 @@ function process_backtrack(entity_index)
             
             -- Если квантовая коррекция слишком высока
             if math_abs(quantum_fix) > 30 then
-                debug_log(string.format(
+# debug_log(string.format(
                     "[BACKTRACK-V5-WARN] %s | High quantum correction: %.1f",
                     player_name, quantum_fix
                 ))
@@ -7557,7 +7537,7 @@ function process_backtrack(entity_index)
             
             -- Если уверенность в направлении очень низкая, предупреждаем
             if direction_confidence < 0.3 then
-                debug_log(string.format(
+# debug_log(string.format(
                     "[BACKTRACK-V2-WARN] %s | Low direction confidence: %.2f method: %s",
                     player_name, direction_confidence, method_used
                 ))
@@ -7652,7 +7632,7 @@ function process_backtrack(entity_index)
         local direction_data = best_record.direction_v2_data or {}
         
         if riptide_v5_debug and ui.get(riptide_v5_debug) and riptide_data.riptide_factor and riptide_data.riptide_factor > 0.3 then
-            debug_log(string.format(
+# debug_log(string.format(
                 "[BACKTRACK-APPLIED] %s | Time: %.3fs | Score: %.0f | Valid: %s",
                 player_name or "Unknown",
                 time_diff,
@@ -7777,7 +7757,7 @@ function should_use_backtrack(entity_index)
                 end
             end
             
-            debug_log(string.format(
+# debug_log(string.format(
                 "[BT-MATRIX-DECISION] Matrix Confidence: %.2f | Backtrack Decision: %s",
                 matrix_analysis.confidence,
                 "ENABLED"
@@ -7876,7 +7856,7 @@ function should_use_backtrack(entity_index)
         return false
     end
     
-    debug_log(string.format(
+# debug_log(string.format(
         "[BT-DECISION] Using backtrack for %s (FOV: %.1f, Dist: %.1f, Vel: %.1f)",
         entity.get_player_name(entity_index) or "Unknown", fov, distance, velocity_mag
     ))
@@ -7909,7 +7889,7 @@ client.set_event_callback("weapon_fire", function(e)
                         intensity_used = player_data_entry.backtrack_intensity_used or 1.0
                     }
                     
-                    debug_log(string.format("[BT-SHOT] Fired at %s with backtrack", 
+# debug_log(string.format("[BT-SHOT] Fired at %s with backtrack", 
                         entity.get_player_name(entity_index) or "Unknown"))
                 end
             end
@@ -7932,7 +7912,7 @@ client.set_event_callback("player_hurt", function(e)
             update_backtrack_learning(victim_id, true, shot_data.record_used)
             
             local damage = e.dmg_health or 0
-            debug_log(string.format("[BT-HIT] Successful hit for %d damage (%.3fs after shot)", 
+# debug_log(string.format("[BT-HIT] Successful hit for %d damage (%.3fs after shot)", 
                 damage, time_since_shot))
             
             -- Clean up
@@ -7949,7 +7929,7 @@ client.set_event_callback("paint", function()
         if current_time - shot_data.shot_time > 0.5 then
             -- Count as miss
             update_backtrack_learning(entity_index, false, shot_data.record_used)
-            debug_log("[BT-MISS] Shot timeout - counting as miss")
+# debug_log("[BT-MISS] Shot timeout - counting as miss")
             last_shot_data[entity_index] = nil
         end
     end
@@ -7963,7 +7943,7 @@ client.set_event_callback("paint", function()
             if fake_lag_detection_enabled and fake_lag_detection_enabled.get() then
                 fake_lag_analysis = detect_fake_lag_manipulation(entity_index)
                 if fake_lag_analysis and fake_lag_analysis.manipulation_detected then
-                    debug_log(string.format(
+# debug_log(string.format(
                         "[BT-FAKE-LAG] Entity %s: %s manipulation detected | Confidence: %.2f",
                         entity_get_player_name(entity_index) or "Unknown",
                         fake_lag_analysis.manipulation_type,
@@ -7974,7 +7954,7 @@ client.set_event_callback("paint", function()
                     if fake_lag_analysis.compensation_needed then
                         local compensation = apply_fake_lag_compensation(entity_index, fake_lag_analysis)
                         if compensation then
-                            debug_log(string.format(
+# debug_log(string.format(
                                 "[BT-FAKE-LAG] Applied compensation: %.2f | Type: %s",
                                 compensation.compensation_factor,
                                 compensation.compensation_type
@@ -8102,7 +8082,7 @@ function auto_adjust_backtrack_settings()
                     local current_quality = hitbox_matrix_quality.get()
                     if current_quality > 2 then
                         hitbox_matrix_quality.set(current_quality - 1)
-                        debug_log("[BT-MATRIX-AUTO] Reduced matrix quality for better performance")
+# debug_log("[BT-MATRIX-AUTO] Reduced matrix quality for better performance")
                     end
                 end
             end
@@ -8113,7 +8093,7 @@ function auto_adjust_backtrack_settings()
                     local current_quality = hitbox_matrix_quality.get()
                     if current_quality < 6 then
                         hitbox_matrix_quality.set(current_quality + 1)
-                        debug_log("[BT-MATRIX-AUTO] Increased matrix quality for better accuracy")
+# debug_log("[BT-MATRIX-AUTO] Increased matrix quality for better accuracy")
                     end
                 end
             end
@@ -8134,7 +8114,7 @@ function auto_adjust_backtrack_settings()
             end
         end
         
-        debug_log("[BT-AUTO] Low hit rate detected, adjusting settings")
+# debug_log("[BT-AUTO] Low hit rate detected, adjusting settings")
     elseif performance.total_shots and performance.total_shots > 10 and performance.hit_rate and performance.hit_rate > 0.7 then
         -- High hit rate - can be more aggressive
         for entity_index, player_data_entry in pairs(player_data) do
@@ -8148,13 +8128,13 @@ function auto_adjust_backtrack_settings()
             end
         end
         
-        debug_log("[BT-AUTO] High hit rate detected, increasing precision")
+# debug_log("[BT-AUTO] High hit rate detected, increasing precision")
     end
     
     -- === MATRIX CONFIDENCE THRESHOLD ADJUSTMENT ===
     if performance.matrix_confidence_correlation < 0.3 then
         -- Matrix confidence is not correlating well with actual hits
-        debug_log("[BT-MATRIX-AUTO] Matrix confidence correlation is poor, consider recalibration")
+# debug_log("[BT-MATRIX-AUTO] Matrix confidence correlation is poor, consider recalibration")
     end
 end
 
@@ -8216,7 +8196,7 @@ function enhanced_backtrack_integration(entity_index)
             local enhanced_confidence = math.min(1.0, best_validated.matrix_confidence + riptide_boost)
             best_validated.matrix_confidence = enhanced_confidence
             
-            debug_log(string.format(
+# debug_log(string.format(
                 "[BT-RIPTIDE-V5] Applied Riptide enhancement | Original: %.2f | Enhanced: %.2f | Boost: %.2f",
                 best_validated.matrix_confidence - riptide_boost,
                 enhanced_confidence,
@@ -8227,7 +8207,7 @@ function enhanced_backtrack_integration(entity_index)
         -- Use matrix-validated record with Riptide V5 enhancement
         local success = apply_backtrack_to_target(entity_index, best_validated.record)
         if success then
-            debug_log(string.format(
+# debug_log(string.format(
                 "[BT-MATRIX-INTEGRATION] Applied matrix-validated record | Confidence: %.2f | Riptide: %s",
                 best_validated.matrix_confidence,
                 riptide_enhancement and "ENHANCED" or "NONE"
@@ -9284,8 +9264,8 @@ local function resolve_aisetpos(entity_index)
             }
             
             -- Debug логирование для матрицы хитбоксов в AISETPOS
-            if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-                debug_log(string.format(
+            if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format(
                     "[AISETPOS-MATRIX] Entity: %s | Matrix Correction: %.2f | Confidence: %.2f | Final Desync: %.2f",
                     player_name,
                     matrix_correction,
@@ -9366,7 +9346,7 @@ local function resolve_aisetpos(entity_index)
             )
         end
         
-        debug_log(string.format(
+# debug_log(string.format(
             "[AISETPOS-V4] %s | Yaw: %.1f° | Desync: %.1f° | Quality: %.2f | Network: %.2f | Latency: %.1fms%s",
             player_name,
             normalize_angle_safe(resolved_yaw),
@@ -9570,8 +9550,8 @@ local function resolve_lc_prediction(entity_index)
                 matrix_confidence = math.min(1.0, matrix_resolution.confidence + 0.1)
                 
                 -- Debug логирование для матрицы хитбоксов в LC
-                if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-                    debug_log(string.format(
+                if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format(
                         "[LC-MATRIX] Entity: %s | Matrix Correction: %.2f | Confidence: %.2f",
                         player_name,
                         matrix_correction,
@@ -9671,8 +9651,8 @@ local function resolve_enemy_antiaim(entity_index)
             }
             
                             -- Debug логирование для матрицы хитбоксов в Enemy Antiaim
-                if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-                debug_log(string.format(
+                if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format(
                     "[ENEMY-AA-MATRIX] Entity: %s | Matrix Analysis: %.2f | Confidence: %.2f",
                     entity_get_player_name(entity_index) or "Unknown",
                     matrix_analysis.desync,
@@ -9697,7 +9677,7 @@ local function on_player_hurt(e)
             local hit_ratio = player_data[victim_id].shots_hit / math.max(player_data[victim_id].shots_fired or 0, 1)
             local player_name = entity_get_player_name(victim_id)
 
-            debug_log(string.format(
+# debug_log(string.format(
                 "[RESOLVER HIT] Player: %s | Hit Ratio: %.2f%% | Shots: %d/%d",
                 player_name or "Unknown", hit_ratio * 100, player_data[victim_id].shots_hit, player_data[victim_id].shots_fired or 0
             ))
@@ -9724,8 +9704,8 @@ local function on_round_start()
     -- Reset all player data
     player_data = {}
     lag_records = {}
-    debug_logs = {}
-    debug_log("[RESOLVER] Round start - Data reset")
+# debug_logs = {}
+# debug_log("[RESOLVER] Round start - Data reset")
 end
 
 -- Safe hitbox center (fallbacks to origin + 64 for head)
@@ -10185,8 +10165,8 @@ function analyze_backtrack_record_via_hitbox_matrix(entity_index, record)
     analysis.quality_score = analysis.confidence * 100
     
     -- Debug logging
-    if hitbox_matrix_debug and hitbox_matrix_debug.get() then
-        debug_log(string.format(
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format(
             "[BT-MATRIX-ANALYSIS] Entity: %s | Confidence: %.2f | Quality: %.0f | Consistency: %.2f | Accuracy: %.2f | Reliability: %.2f",
             entity_get_player_name(entity_index) or "Unknown",
             analysis.confidence,
