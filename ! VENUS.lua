@@ -41,14 +41,1710 @@ ffi.cdef[[
         float velocity_modifier;
         bool valid;
     } lag_record_t;
+    
+    typedef struct {
+        float m[3][4];
+    } matrix3x4_t;
 ]]
+
+ffi.cdef[[
+    typedef struct {
+        int id; int version; int checksum; char name[64]; int length;
+        float eyeposition[3]; float illumposition[3]; float hull_min[3]; float hull_max[3];
+        float view_bbmin[3]; float view_bbmax[3]; int flags; int num_bones; int bone_index;
+        int num_bonecontrollers; int bonecontroller_index; int num_hitboxsets; int hitboxset_index;
+    } studiohdr_t;
+    typedef struct {
+        int name_index;
+        int num_hitboxes;
+        int hitbox_index;
+    } mstudiohitboxset_t;
+    typedef struct {
+        int bone;
+        int group;
+        float bbmin[3];
+        float bbmax[3];
+        int name_index;
+        int pad[3];
+        float radius;
+        int group_unknown;
+    } mstudiobbox_t;
+]]
+
+-- Resolve model header via model info if available
+local function get_studiohdr_for_entity(ent)
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+        -- debug_log(string.format("[STUDIOHDR-DEBUG] Entity: %s | Starting studiohdr retrieval...", ent))
+        -- debug_log(string.format("[STUDIOHDR-DEBUG] Entity: %s | Entity type: %s, entity.get_model: %s, client.get_model_info: %s", ent, type(ent), tostring(entity.get_model), tostring(client.get_model_info)))
+        if ent and entity.get_prop then
+            local health = entity.get_prop(ent, "m_iHealth")
+            -- debug_log(string.format("[STUDIOHDR-DEBUG] Entity: %s | Entity health: %s", ent, tostring(health)))
+        end
+        if ent and entity.get_client_renderable then
+            local renderable = entity.get_client_renderable(ent)
+            -- debug_log(string.format("[STUDIOHDR-DEBUG] Entity: %s | Renderable: %s", ent, tostring(renderable)))
+        end
+        if ent and entity.get_prop then
+            local origin = entity.get_prop(ent, "m_vecOrigin")
+            if origin then
+                -- debug_log(string.format("[STUDIOHDR-DEBUG] Entity: %s | Entity origin: %s", ent, tostring(origin)))
+            end
+        end
+    end
+    
+    if entity.get_model and client.get_model_info then
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[STUDIOHDR-DEBUG] Entity: %s | Functions available, calling entity.get_model...", ent))
+        end
+        
+        local ok, model = pcall(entity.get_model, ent)
+        if ok and model then
+            if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[STUDIOHDR-DEBUG] Entity: %s | Got model: %s, calling client.get_model_info...", ent, tostring(model)))
+            end
+            
+            local ok2, info = pcall(client.get_model_info, model)
+            if ok2 and info and info.studiohdr then
+                if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[STUDIOHDR-DEBUG] Entity: %s | Successfully got studiohdr: %s", ent, tostring(info.studiohdr)))
+                    if info.studiohdr then
+                        local studiohdr = ffi.cast("studiohdr_t*", info.studiohdr)
+                        if studiohdr then
+# debug_log(string.format("[STUDIOHDR-DEBUG] Entity: %s | Studiohdr details - hitboxset_index: %d", ent, studiohdr.hitboxset_index or 0))
+# debug_log(string.format("[STUDIOHDR-DEBUG] Entity: %s | Studiohdr type: %s", ent, type(studiohdr)))
+# debug_log(string.format("[STUDIOHDR-DEBUG] Entity: %s | Studiohdr pointer: %s", ent, tostring(studiohdr)))
+                        end
+                    end
+                end
+                local final_studiohdr = ffi.cast("studiohdr_t*", info.studiohdr)
+                if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[STUDIOHDR-DEBUG] Entity: %s | Final studiohdr cast result: %s (type: %s)", ent, tostring(final_studiohdr), type(final_studiohdr)))
+                end
+                return final_studiohdr
+            else
+                if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[STUDIOHDR-DEBUG] Entity: %s | Failed to get model info or studiohdr: info=%s", ent, tostring(info)))
+                end
+            end
+        else
+            if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[STUDIOHDR-DEBUG] Entity: %s | Failed to get model: ok=%s, model=%s", ent, tostring(ok), tostring(model)))
+            end
+        end
+    else
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[STUDIOHDR-DEBUG] Entity: %s | entity.get_model or client.get_model_info not available: entity.get_model=%s, client.get_model_info=%s", ent, tostring(entity.get_model), tostring(client.get_model_info)))
+        end
+    end
+    return nil
+end
+
+-- Bones cache per tick
+local bones_cache = { tick = -1, per_entity = {} }
+
+local function try_setup_bones_vtable(ent, out_bones, max_bones, bone_mask, time)
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[VTABLE-DEBUG] Entity: %s | Attempting to get renderable...", ent))
+# debug_log(string.format("[VTABLE-DEBUG] Entity: %s | Entity type: %s, entity.get_renderable: %s", ent, type(ent), tostring(entity.get_renderable)))
+    end
+    
+    local ok, renderable = pcall(function()
+        return entity.get_renderable and entity.get_renderable(ent) or nil
+    end)
+    if not ok or not renderable then 
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[VTABLE-DEBUG] Entity: %s | Failed to get renderable: %s", ent, tostring(renderable)))
+        end
+        return false 
+    end
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[VTABLE-DEBUG] Entity: %s | Got renderable: %s, checking vtable functions...", ent, tostring(renderable)))
+    end
+    
+    local vtbl = ffi.cast("void***", renderable)[0]
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[VTABLE-DEBUG] Entity: %s | Got vtable: %s, checking indices 13-18...", ent, tostring(vtbl)))
+# debug_log(string.format("[VTABLE-DEBUG] Entity: %s | Vtable pointer: %s, renderable: %s", ent, tostring(vtbl), tostring(renderable)))
+# debug_log(string.format("[VTABLE-DEBUG] Entity: %s | Vtable type: %s", ent, type(vtbl)))
+        if vtbl then
+# debug_log(string.format("[VTABLE-DEBUG] Entity: %s | Vtable[0] type: %s", ent, type(vtbl[0])))
+            for i = 0, 5 do
+                if vtbl[i] then
+# debug_log(string.format("[VTABLE-DEBUG] Entity: %s | Vtable[%d]: %s", ent, i, tostring(vtbl[i])))
+                end
+            end
+        end
+    end
+    
+    for idx = 13, 18 do
+        local fn_ok, fn = pcall(function()
+            return ffi.cast("bool(__thiscall*)(void*, matrix3x4_t*, int, int, float)", vtbl[idx])
+        end)
+        if fn_ok and fn ~= nil then
+            if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[VTABLE-DEBUG] Entity: %s | Found vtable function at index %d: %s, calling...", ent, idx, tostring(fn)))
+            end
+            
+            local ok_call, res = pcall(function()
+                return fn(renderable, out_bones, max_bones, bone_mask, time)
+            end)
+            if ok_call and res then 
+                if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[VTABLE-DEBUG] Entity: %s | Successfully called vtable function at index %d, result: %s", ent, idx, tostring(res)))
+# debug_log(string.format("[VTABLE-DEBUG] Entity: %s | Vtable call parameters - max_bones: %d, bone_mask: %d, time: %.2f", ent, max_bones, bone_mask, time))
+                end
+                return true 
+            else
+                if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[VTABLE-DEBUG] Entity: %s | Failed to call vtable function at index %d, error: %s", ent, idx, tostring(res)))
+                end
+            end
+        else
+            if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[VTABLE-DEBUG] Entity: %s | Failed to get vtable function at index %d: %s", ent, idx, tostring(fn)))
+            end
+        end
+    end
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[VTABLE-DEBUG] Entity: %s | No working vtable function found", ent))
+    end
+    return false
+end
+
+local function get_bones_cached(ent)
+    local cur_tick = globals.tickcount()
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[BONES-DEBUG] Entity: %s | Current tick: %d, cache tick: %d", ent, cur_tick, bones_cache.tick))
+# debug_log(string.format("[BONES-DEBUG] Entity: %s | Entity type: %s, entity.get_renderable: %s", ent, type(ent), tostring(entity.get_renderable)))
+    end
+    
+    if bones_cache.tick ~= cur_tick then
+        bones_cache.tick = cur_tick
+        bones_cache.per_entity = {}
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[BONES-DEBUG] Entity: %s | Cache cleared for new tick", ent))
+        end
+    end
+    
+    if bones_cache.per_entity[ent] then 
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[BONES-DEBUG] Entity: %s | Returning cached bones", ent))
+        end
+        return bones_cache.per_entity[ent] 
+    end
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[BONES-DEBUG] Entity: %s | Attempting to get bones via vtable...", ent))
+    end
+    
+    local bones = ffi.new("matrix3x4_t[128]")
+    local ok = try_setup_bones_vtable(ent, bones, 128, 0x100, globals.curtime())
+    if ok then
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[BONES-DEBUG] Entity: %s | Successfully got bones via vtable, caching result", ent))
+# debug_log(string.format("[BONES-DEBUG] Entity: %s | Bones array type: %s", ent, type(bones)))
+            if type(bones) == "cdata" then
+# debug_log(string.format("[BONES-DEBUG] Entity: %s | Bones cdata size: %d", ent, ffi.sizeof(bones)))
+                if bones[0] then
+# debug_log(string.format("[BONES-DEBUG] Entity: %s | First bone matrix translation: (%.6f,%.6f,%.6f)", ent, 
+                        bones[0].m[0][3] or 0, bones[0].m[1][3] or 0, bones[0].m[2][3] or 0))
+                end
+            end
+        end
+        bones_cache.per_entity[ent] = bones
+        return bones
+    else
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[BONES-DEBUG] Entity: %s | Failed to get bones via vtable", ent))
+# debug_log(string.format("[BONES-DEBUG] Entity: %s | Vtable call parameters: max_bones=128, bone_mask=0x100, time=%.2f", ent, globals.curtime()))
+        end
+    end
+    return nil
+end
+
+local function transform_point(mat, v)
+    return {
+        x = mat[0][0]*v.x + mat[0][1]*v.y + mat[0][2]*v.z + mat[0][3],
+        y = mat[1][0]*v.x + mat[1][1]*v.y + mat[1][2]*v.z + mat[1][3],
+        z = mat[2][0]*v.x + mat[2][1]*v.y + mat[2][2]*v.z + mat[2][3]
+    }
+end
+
+-- Функция для создания vector3 из entity_get_prop
+function vector3(prop_value)
+    if not prop_value then return nil end
+    
+    if type(prop_value) == "table" then
+        -- Handle array format [x, y, z]
+        if prop_value[1] and prop_value[2] and prop_value[3] then
+            return {x = prop_value[1], y = prop_value[2], z = prop_value[3]}
+        -- Handle object format {x, y, z}
+        elseif prop_value.x and prop_value.y and prop_value.z then
+            return {x = prop_value.x, y = prop_value.y, z = prop_value.z}
+        -- Handle GameSense vector format
+        elseif prop_value.x and prop_value.y and prop_value.z then
+            return {x = prop_value.x, y = prop_value.y, z = prop_value.z}
+        end
+    end
+    
+    -- Try to handle if it's a userdata or other format
+    if type(prop_value) == "userdata" then
+        -- Try to access x, y, z properties
+        local success, x = pcall(function() return prop_value.x end)
+        local success2, y = pcall(function() return prop_value.y end)
+        local success3, z = pcall(function() return prop_value.z end)
+        
+        if success and success2 and success3 and x and y and z then
+            return {x = x, y = y, z = z}
+        end
+    end
+    
+    return nil
+end
+
+local function get_hitbox_bbox_via_studio(ent, hitbox_id)
+    hitbox_id = hitbox_id or 0
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[STUDIO-BBOX-DEBUG] Entity: %s | Hitbox: %d | Starting studio bbox retrieval...", ent, hitbox_id))
+    end
+    
+    local hdr = get_studiohdr_for_entity(ent)
+    if not hdr then 
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[STUDIO-BBOX-DEBUG] Entity: %s | Hitbox: %d | Failed to get studiohdr", ent, hitbox_id))
+        end
+        return nil 
+    end
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[STUDIO-BBOX-DEBUG] Entity: %s | Hitbox: %d | Successfully got studiohdr: %s", ent, hitbox_id, tostring(hdr)))
+        if hdr then
+# debug_log(string.format("[STUDIO-BBOX-DEBUG] Entity: %s | Hitbox: %d | Studiohdr type: %s", ent, hitbox_id, type(hdr)))
+        end
+    end
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[STUDIO-BBOX-DEBUG] Entity: %s | Hitbox: %d | Got studiohdr, getting hitbox set...", ent, hitbox_id))
+    end
+    
+    local set = ffi.cast("mstudiohitboxset_t*", ffi.cast("uint8_t*", hdr) + hdr.hitboxset_index)
+    if not set or set.num_hitboxes <= hitbox_id then 
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[STUDIO-BBOX-DEBUG] Entity: %s | Hitbox: %d | Failed to get hitbox set: set=%s, num_hitboxes=%d", ent, hitbox_id, tostring(set), set and set.num_hitboxes or "nil"))
+        end
+        return nil 
+    end
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[STUDIO-BBOX-DEBUG] Entity: %s | Hitbox: %d | Got hitbox set, getting specific bbox...", ent, hitbox_id))
+    end
+    
+    local bbox = ffi.cast("mstudiobbox_t*", ffi.cast("uint8_t*", set) + set.hitbox_index + hitbox_id * ffi.sizeof("mstudiobbox_t"))
+    if not bbox then 
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[STUDIO-BBOX-DEBUG] Entity: %s | Hitbox: %d | Failed to get specific bbox", ent, hitbox_id))
+        end
+        return nil 
+    end
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[STUDIO-BBOX-DEBUG] Entity: %s | Hitbox: %d | Got bbox, getting bones...", ent, hitbox_id))
+    end
+    
+    local bones = get_bones_cached and get_bones_cached(ent) or nil
+    if not bones then 
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[STUDIO-BBOX-DEBUG] Entity: %s | Hitbox: %d | Failed to get bones", ent, hitbox_id))
+        end
+        return nil 
+    end
+    
+    local bone = bbox.m_iBone or 0
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[STUDIO-BBOX-DEBUG] Entity: %s | Hitbox: %d | Bone index: %d", ent, hitbox_id, bone))
+    end
+    
+    local mat = bones[bone]
+    if not mat then 
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[STUDIO-BBOX-DEBUG] Entity: %s | Hitbox: %d | Failed to get bone matrix for bone %d", ent, hitbox_id, bone))
+        end
+        return nil 
+    end
+    
+    local mins = {x = bbox.bbmin[0], y = bbox.bbmin[1], z = bbox.bbmin[2]}
+    local maxs = {x = bbox.bbmax[0], y = bbox.bbmax[1], z = bbox.bbmax[2]}
+    local center_local = {x = (mins.x + maxs.x)/2, y = (mins.y + maxs.y)/2, z = (mins.z + maxs.z)/2}
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[STUDIO-BBOX-DEBUG] Entity: %s | Hitbox: %d | Local coords - mins:(%.2f,%.2f,%.2f) maxs:(%.2f,%.2f,%.2f) center:(%.2f,%.2f,%.2f)", 
+            ent, hitbox_id, mins.x or 0, mins.y or 0, mins.z or 0, maxs.x or 0, maxs.y or 0, maxs.z or 0, center_local.x or 0, center_local.y or 0, center_local.z or 0))
+    end
+    
+    local result = {
+        center = transform_point(mat, center_local),
+        mins = transform_point(mat, mins),
+        maxs = transform_point(mat, maxs)
+    }
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[STUDIO-BBOX-DEBUG] Entity: %s | Hitbox: %d | Successfully created result", ent, hitbox_id))
+    end
+    
+    return result
+end
+
+-- === ADVANCED HITBOX MATRIX SYSTEM FOR IMPROVED RESOLVING ===
+-- Система матрицы хитбоксов для точного резольвинга через геометрию
+
+-- Расширенные структуры для хитбоксов
+ffi.cdef[[
+    typedef struct {
+        float m[3][4];
+    } matrix3x4_t;
+    
+    typedef struct {
+        int bone;
+        int parent;
+        int flags;
+        int name_index;
+        int unused[6];
+        float pos[3];
+        float quat[4];
+        float rot[3];
+        matrix3x4_t pose_to_bone;
+        float alignment[4];
+        int proc_type;
+        int proc_index;
+        int proc_vertex_start;
+        int proc_vertex_count;
+        int proc_tri_start;
+        int proc_tri_count;
+        int proc_flags;
+        int proc_bone;
+        int proc_rule;
+        int proc_vertex_data;
+        int proc_offset;
+    } mstudiobone_t;
+]]
+
+-- Кэш матриц хитбоксов для каждого тика
+local hitbox_matrix_cache = { tick = -1, per_entity = {} }
+
+-- Получение точной матрицы хитбокса через studiohdr
+function get_hitbox_matrix_precise(entity_index, hitbox_id)
+    if not entity_index or not hitbox_id then 
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Invalid parameters", entity_index, hitbox_id))
+        end
+        return nil 
+    end
+    
+    local entity = entity_index
+    if not entity then 
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Entity is nil", entity_index, hitbox_id))
+        end
+        return nil 
+    end
+    
+    -- Additional entity validation
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Entity validation - type: %s, alive: %s", entity_index, hitbox_id, type(entity), tostring(entity.is_alive and entity.is_alive(entity) or "unknown")))
+        if entity.get_prop then
+            local health = entity.get_prop(entity, "m_iHealth")
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Entity health: %s", entity_index, hitbox_id, tostring(health)))
+        end
+    end
+    
+    -- Debug: проверяем доступность entity функций
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Starting hitbox matrix retrieval...", entity_index, hitbox_id))
+    end
+    
+    local hdr = get_studiohdr_for_entity(entity)
+    if not hdr then 
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Failed to get studiohdr", entity_index, hitbox_id))
+        end
+        return nil 
+    end
+    
+    -- Debug: проверяем хитбокс сет
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Got studiohdr, checking hitbox set...", entity_index, hitbox_id))
+    end
+    
+    -- Получаем хитбокс сет
+    local hitbox_set = ffi.cast("mstudiohitboxset_t*", ffi.cast("uint8_t*", hdr) + hdr.hitboxset_index)
+    if not hitbox_set or hitbox_set.num_hitboxes <= hitbox_id then 
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Failed to get hitbox set or invalid hitbox_id", entity_index, hitbox_id))
+        end
+        return nil 
+    end
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Successfully got hitbox set: %s", entity_index, hitbox_id, tostring(hitbox_set)))
+        if hitbox_set then
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Hitbox set type: %s", entity_index, hitbox_id, type(hitbox_set)))
+                    if hitbox_set.num_hitboxes then
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Hitbox set num_hitboxes: %d", entity_index, hitbox_id, hitbox_set.num_hitboxes))
+        end
+        if hitbox_set.hitbox_index then
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Hitbox set hitbox_index: %d", entity_index, hitbox_id, hitbox_set.hitbox_index))
+        end
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Hitbox set type: %s", entity_index, hitbox_id, type(hitbox_set)))
+        if hitbox_set.hitbox then
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Hitbox set hitbox type: %s", entity_index, hitbox_id, type(hitbox_set.hitbox)))
+        end
+        end
+    end
+    
+    -- Debug: проверяем конкретный хитбокс
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Got hitbox set, checking specific hitbox...", entity_index, hitbox_id))
+    end
+    
+    -- Получаем конкретный хитбокс
+    local bbox = ffi.cast("mstudiobbox_t*", ffi.cast("uint8_t*", hitbox_set) + hitbox_set.hitbox_index + hitbox_id * ffi.sizeof("mstudiobbox_t"))
+    if not bbox then 
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Failed to get specific hitbox", entity_index, hitbox_id))
+        end
+        return nil 
+    end
+    
+    -- Debug: проверяем кости
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Got hitbox, checking bones...", entity_index, hitbox_id))
+    end
+    
+    -- Получаем кости
+    local bones = get_bones_cached(entity)
+    if not bones then 
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Failed to get bones", entity_index, hitbox_id))
+        end
+        return nil 
+    end
+    
+    local bone_index = bbox.bone
+    if bone_index < 0 or bone_index >= 128 then 
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Invalid bone index: %d", entity_index, hitbox_id, bone_index))
+        end
+        return nil 
+    end
+    
+    local bone_matrix = bones[bone_index]
+    if not bone_matrix then 
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Failed to get bone matrix for bone %d", entity_index, hitbox_id, bone_index))
+        end
+        return nil 
+    end
+    
+    -- Debug: успешно получили матрицу
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Successfully got hitbox matrix", entity_index, hitbox_id))
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Matrix details - bone_index: %d, radius: %.2f", entity_index, hitbox_id, bone_index, bbox.radius or 0))
+        if bone_matrix then
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Bone matrix translation: (%.2f,%.2f,%.2f)", entity_index, hitbox_id, 
+                bone_matrix.m[0][3] or 0, bone_matrix.m[1][3] or 0, bone_matrix.m[2][3] or 0))
+            -- Additional matrix debugging
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Matrix rotation - [0][0]=%.3f, [0][1]=%.3f, [0][2]=%.3f", entity_index, hitbox_id, 
+                bone_matrix.m[0][0] or 0, bone_matrix.m[0][1] or 0, bone_matrix.m[0][2] or 0))
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Matrix rotation - [1][0]=%.3f, [1][1]=%.3f, [1][2]=%.3f", entity_index, hitbox_id, 
+                bone_matrix.m[1][0] or 0, bone_matrix.m[1][1] or 0, bone_matrix.m[1][2] or 0))
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Matrix rotation - [2][0]=%.3f, [2][1]=%.3f, [2][2]=%.3f", entity_index, hitbox_id, 
+                bone_matrix.m[2][0] or 0, bone_matrix.m[2][1] or 0, bone_matrix.m[2][2] or 0))
+        end
+    end
+    
+    local center_local = {
+        x = ((bbox.bbmin[0] or 0) + (bbox.bbmax[0] or 0)) / 2,
+        y = ((bbox.bbmin[1] or 0) + (bbox.bbmax[1] or 0)) / 2,
+        z = ((bbox.bbmin[2] or 0) + (bbox.bbmax[2] or 0)) / 2
+    }
+    
+    local mins_local = { 
+        x = bbox.bbmin[0] or 0, 
+        y = bbox.bbmin[1] or 0, 
+        z = bbox.bbmin[2] or 0 
+    }
+    
+    local maxs_local = { 
+        x = bbox.bbmax[0] or 0, 
+        y = bbox.bbmax[1] or 0, 
+        z = bbox.bbmax[2] or 0 
+    }
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Local coords - center:(%.2f,%.2f,%.2f) mins:(%.2f,%.2f,%.2f) maxs:(%.2f,%.2f,%.2f)", 
+            entity_index, hitbox_id, 
+            center_local.x or 0, center_local.y or 0, center_local.z or 0,
+            mins_local.x or 0, mins_local.y or 0, mins_local.z or 0,
+            maxs_local.x or 0, maxs_local.y or 0, maxs_local.z or 0))
+    end
+    
+    local result = {
+        matrix = bone_matrix,
+        bbox = bbox,
+        bone_index = bone_index,
+        center_local = center_local,
+        mins_local = mins_local,
+        maxs_local = maxs_local,
+        radius = bbox.radius or 0
+    }
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Final result object:", entity_index, hitbox_id))
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   matrix: %s (type: %s)", entity_index, hitbox_id, tostring(result.matrix), type(result.matrix)))
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   bbox: %s (type: %s)", entity_index, hitbox_id, tostring(result.bbox), type(result.bbox)))
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   bone_index: %s (type: %s)", entity_index, hitbox_id, tostring(result.bone_index), type(result.bone_index)))
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   center_local: %s (type: %s)", entity_index, hitbox_id, tostring(result.center_local), type(result.center_local)))
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   mins_local: %s (type: %s)", entity_index, hitbox_id, tostring(result.mins_local), type(result.mins_local)))
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   maxs_local: %s (type: %s)", entity_index, hitbox_id, tostring(result.maxs_local), type(result.maxs_local)))
+# debug_log(string.format("[HITBOX-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   radius: %s (type: %s)", entity_index, hitbox_id, tostring(result.radius), type(result.radius)))
+    end
+    
+    return result
+end
+
+-- Трансформация точки через матрицу с высокой точностью
+function transform_point_precise(matrix, point)
+    if not matrix or not point then 
+                    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[TRANSFORM-DEBUG] transform_point_precise: matrix=%s, point=%s", tostring(matrix), tostring(point)))
+            if matrix then
+# debug_log(string.format("[TRANSFORM-DEBUG] transform_point_precise: matrix type: %s", type(matrix)))
+                if matrix.m then
+# debug_log(string.format("[TRANSFORM-DEBUG] transform_point_precise: matrix.m type: %s", type(matrix.m)))
+                    if matrix.m[0] then
+# debug_log(string.format("[TRANSFORM-DEBUG] transform_point_precise: matrix.m[0] type: %s", type(matrix.m[0])))
+                    end
+                end
+            end
+            if point then
+# debug_log(string.format("[TRANSFORM-DEBUG] transform_point_precise: point type: %s", type(point)))
+                if point.x then
+# debug_log(string.format("[TRANSFORM-DEBUG] transform_point_precise: point.x type: %s", type(point.x)))
+# debug_log(string.format("[TRANSFORM-DEBUG] transform_point_precise: point values: x=%.6f, y=%.6f, z=%.6f", point.x or 0, point.y or 0, point.z or 0))
+                end
+            end
+        end
+        return nil 
+    end
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[TRANSFORM-DEBUG] transform_point_precise: matrix[0][0]=%.6f, matrix[0][1]=%.6f, matrix[0][2]=%.6f, matrix[0][3]=%.6f", 
+            matrix.m[0][0] or 0, matrix.m[0][1] or 0, matrix.m[0][2] or 0, matrix.m[0][3] or 0))
+# debug_log(string.format("[TRANSFORM-DEBUG] transform_point_precise: matrix[1][0]=%.6f, matrix[1][1]=%.6f, matrix[1][2]=%.6f, matrix[1][3]=%.6f", 
+            matrix.m[1][0] or 0, matrix.m[1][1] or 0, matrix.m[1][2] or 0, matrix.m[1][3] or 0))
+# debug_log(string.format("[TRANSFORM-DEBUG] transform_point_precise: matrix[2][0]=%.6f, matrix[2][1]=%.6f, matrix[2][2]=%.6f, matrix[2][3]=%.6f", 
+            matrix.m[2][0] or 0, matrix.m[2][1] or 0, matrix.m[2][2] or 0, matrix.m[2][3] or 0))
+# debug_log(string.format("[TRANSFORM-DEBUG] transform_point_precise: point x=%.6f, y=%.6f, z=%.6f", point.x or 0, point.y or 0, point.z or 0))
+    end
+    
+    local result = {
+        x = (matrix.m[0][0] or 0) * (point.x or 0) + (matrix.m[0][1] or 0) * (point.y or 0) + (matrix.m[0][2] or 0) * (point.z or 0) + (matrix.m[0][3] or 0),
+        y = (matrix.m[1][0] or 0) * (point.x or 0) + (matrix.m[1][1] or 0) * (point.y or 0) + (matrix.m[1][2] or 0) * (point.z or 0) + (matrix.m[1][3] or 0),
+        z = (matrix.m[2][0] or 0) * (point.x or 0) + (matrix.m[2][1] or 0) * (point.y or 0) + (matrix.m[2][2] or 0) * (point.z or 0) + (matrix.m[2][3] or 0)
+    }
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[TRANSFORM-DEBUG] transform_point_precise: calculation details:"))
+# debug_log(string.format("[TRANSFORM-DEBUG] transform_point_precise: x = %.6f*%.6f + %.6f*%.6f + %.6f*%.6f + %.6f = %.6f", 
+            matrix.m[0][0] or 0, point.x or 0, matrix.m[0][1] or 0, point.y or 0, matrix.m[0][2] or 0, point.z or 0, matrix.m[0][3] or 0, result.x or 0))
+# debug_log(string.format("[TRANSFORM-DEBUG] transform_point_precise: y = %.6f*%.6f + %.6f*%.6f + %.6f*%.6f + %.6f = %.6f", 
+            matrix.m[1][0] or 0, point.x or 0, matrix.m[1][1] or 0, point.y or 0, matrix.m[1][2] or 0, point.z or 0, matrix.m[1][3] or 0, result.y or 0))
+# debug_log(string.format("[TRANSFORM-DEBUG] transform_point_precise: z = %.6f*%.6f + %.6f*%.6f + %.6f*%.6f + %.6f = %.6f", 
+            matrix.m[2][0] or 0, point.x or 0, matrix.m[2][1] or 0, point.y or 0, matrix.m[2][2] or 0, point.z or 0, matrix.m[2][3] or 0, result.z or 0))
+# debug_log(string.format("[TRANSFORM-DEBUG] transform_point_precise: input=(%.6f,%.6f,%.6f) -> output=(%.6f,%.6f,%.6f)", 
+            point.x or 0, point.y or 0, point.z or 0, 
+            result.x or 0, result.y or 0, result.z or 0))
+    end
+    
+    return result
+end
+
+-- Получение мировых координат хитбокса через матрицу
+function get_hitbox_world_coords(entity_index, hitbox_id)
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[WORLD-COORDS-DEBUG] Entity: %s | Hitbox: %d | Getting world coordinates...", entity_index, hitbox_id))
+    end
+    
+    local hitbox_data = get_hitbox_matrix_precise(entity_index, hitbox_id)
+    if not hitbox_data then 
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[WORLD-COORDS-DEBUG] Entity: %s | Hitbox: %d | Failed to get hitbox data", entity_index, hitbox_id))
+        end
+        return nil 
+    end
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[WORLD-COORDS-DEBUG] Entity: %s | Hitbox: %d | Got hitbox data, transforming to world coordinates...", entity_index, hitbox_id))
+        if hitbox_data.center_local then
+# debug_log(string.format("[WORLD-COORDS-DEBUG] Entity: %s | Hitbox: %d | Local center: (%.2f,%.2f,%.2f)", entity_index, hitbox_id, 
+                hitbox_data.center_local.x or 0, hitbox_data.center_local.y or 0, hitbox_data.center_local.z or 0))
+        end
+        if hitbox_data.matrix then
+# debug_log(string.format("[WORLD-COORDS-DEBUG] Entity: %s | Hitbox: %d | Matrix translation: (%.2f,%.2f,%.2f)", entity_index, hitbox_id, 
+                hitbox_data.matrix.m[0][3] or 0, hitbox_data.matrix.m[1][3] or 0, hitbox_data.matrix.m[2][3] or 0))
+        end
+    end
+    
+    local center_world = transform_point_precise(hitbox_data.matrix, hitbox_data.center_local)
+    local mins_world = transform_point_precise(hitbox_data.matrix, hitbox_data.mins_local)
+    local maxs_world = transform_point_precise(hitbox_data.matrix, hitbox_data.maxs_local)
+    
+    if not center_world or not mins_world or not maxs_world then 
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[WORLD-COORDS-DEBUG] Entity: %s | Hitbox: %d | Failed to transform to world coordinates", entity_index, hitbox_id))
+        end
+        return nil 
+    end
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[WORLD-COORDS-DEBUG] Entity: %s | Hitbox: %d | Successfully got world coordinates: center(%.2f,%.2f,%.2f)", entity_index, hitbox_id, center_world.x or 0, center_world.y or 0, center_world.z or 0))
+    end
+    
+    return {
+        center = center_world,
+        mins = mins_world,
+        maxs = maxs_world,
+        radius = hitbox_data.radius,
+        bone_index = hitbox_data.bone_index,
+        matrix = hitbox_data.matrix
+    }
+end
+
+-- Анализ десинка через матрицу хитбоксов
+function analyze_desync_via_hitbox_matrix(entity_index, hitbox_id, angle_offset)
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Starting desync analysis...", entity_index, hitbox_id, angle_offset))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Entity type: %s, alive: %s", entity_index, hitbox_id, angle_offset, type(entity_index), tostring(entity.is_alive and entity.is_alive(entity_index) or "unknown")))
+        if entity_index and entity.get_prop then
+            local health = entity.get_prop(entity_index, "m_iHealth")
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Entity health: %s", entity_index, hitbox_id, angle_offset, tostring(health)))
+        end
+        if entity_index and entity.get_client_renderable then
+            local renderable = entity.get_client_renderable(entity_index)
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Entity renderable: %s", entity_index, hitbox_id, angle_offset, tostring(renderable)))
+        end
+        if entity_index and entity.get_prop then
+            local origin = entity.get_prop(entity_index, "m_vecOrigin")
+            if origin then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Entity origin: %s", entity_index, hitbox_id, angle_offset, tostring(origin)))
+            end
+            local flags = entity.get_prop(entity_index, "m_fFlags")
+            if flags then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Entity flags: %s", entity_index, hitbox_id, angle_offset, tostring(flags)))
+            end
+            local team = entity.get_prop(entity_index, "m_iTeamNum")
+            if team then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Entity team: %s", entity_index, hitbox_id, angle_offset, tostring(team)))
+            end
+        end
+    end
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Calling get_hitbox_matrix_precise...", entity_index, hitbox_id, angle_offset))
+    end
+    local hitbox_data = get_hitbox_matrix_precise(entity_index, hitbox_id)
+    if not hitbox_data then 
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Failed to get hitbox data", entity_index, hitbox_id, angle_offset))
+        end
+        return nil 
+    end
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Successfully got hitbox data: %s", entity_index, hitbox_id, angle_offset, tostring(hitbox_data)))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Hitbox data type: %s", entity_index, hitbox_id, angle_offset, type(hitbox_data)))
+        if hitbox_data.matrix then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Hitbox data matrix: %s (type: %s)", entity_index, hitbox_id, angle_offset, tostring(hitbox_data.matrix), type(hitbox_data.matrix)))
+        end
+        if hitbox_data.center_local then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Hitbox data center_local: %s (type: %s)", entity_index, hitbox_id, angle_offset, tostring(hitbox_data.center_local), type(hitbox_data.center_local)))
+        end
+    end
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Successfully got hitbox data", entity_index, hitbox_id, angle_offset))
+        if hitbox_data.matrix then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Matrix translation: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, angle_offset,
+                hitbox_data.matrix.m[0][3] or 0, hitbox_data.matrix.m[1][3] or 0, hitbox_data.matrix.m[2][3] or 0))
+        end
+        if hitbox_data.center_local then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Local center: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, angle_offset,
+                hitbox_data.center_local.x or 0, hitbox_data.center_local.y or 0, hitbox_data.center_local.z or 0))
+        end
+    end
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Successfully got hitbox data", entity_index, hitbox_id, angle_offset))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Hitbox data type: %s", entity_index, hitbox_id, angle_offset, type(hitbox_data)))
+        if hitbox_data.matrix then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Hitbox matrix translation: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, angle_offset, 
+                hitbox_data.matrix.m[0][3] or 0, hitbox_data.matrix.m[1][3] or 0, hitbox_data.matrix.m[2][3] or 0))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Hitbox matrix type: %s", entity_index, hitbox_id, angle_offset, type(hitbox_data.matrix)))
+            if hitbox_data.matrix.m then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Hitbox matrix.m type: %s", entity_index, hitbox_id, angle_offset, type(hitbox_data.matrix.m)))
+            end
+        end
+        if hitbox_data.center_local then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Local center: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, angle_offset, 
+                hitbox_data.center_local.x or 0, hitbox_data.center_local.y or 0, hitbox_data.center_local.z or 0))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Local center type: %s", entity_index, hitbox_id, angle_offset, type(hitbox_data.center_local)))
+        end
+        if hitbox_data.mins_local then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Local mins: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, angle_offset, 
+                hitbox_data.mins_local.x or 0, hitbox_data.mins_local.y or 0, hitbox_data.mins_local.z or 0))
+        end
+        if hitbox_data.maxs_local then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Local maxs: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, angle_offset, 
+                hitbox_data.maxs_local.x or 0, hitbox_data.maxs_local.y or 0, hitbox_data.maxs_local.z or 0))
+        end
+    end
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Got hitbox data, creating rotation matrix...", entity_index, hitbox_id, angle_offset))
+    end
+    
+    -- Создаем матрицу с поворотом для анализа десинка
+    local rotation_matrix = ffi.new("matrix3x4_t")
+    
+    -- Применяем поворот к матрице кости
+    local angle_rad = math.rad(angle_offset or 0)
+    local cos_a = math.cos(angle_rad)
+    local sin_a = math.sin(angle_rad)
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Calculated cos=%.3f, sin=%.3f", entity_index, hitbox_id, angle_offset, cos_a, sin_a))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Angle in radians: %.6f", entity_index, hitbox_id, angle_offset, angle_rad))
+    end
+    
+    -- Поворот вокруг оси Z (Yaw) - исправленная матрица поворота
+    rotation_matrix.m[0][0] = cos_a
+    rotation_matrix.m[0][1] = -sin_a
+    rotation_matrix.m[0][2] = 0
+    rotation_matrix.m[0][3] = 0
+    
+    rotation_matrix.m[1][0] = sin_a
+    rotation_matrix.m[1][1] = cos_a
+    rotation_matrix.m[1][2] = 0
+    rotation_matrix.m[1][3] = 0
+    
+    rotation_matrix.m[2][0] = 0
+    rotation_matrix.m[2][1] = 0
+    rotation_matrix.m[2][2] = 1
+    rotation_matrix.m[2][3] = 0
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Rotation matrix created: [0][0]=%.3f, [0][1]=%.3f, [1][0]=%.3f, [1][1]=%.3f", entity_index, hitbox_id, angle_offset, 
+            rotation_matrix.m[0][0] or 0, rotation_matrix.m[0][1] or 0, rotation_matrix.m[1][0] or 0, rotation_matrix.m[1][1] or 0))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Full rotation matrix:", entity_index, hitbox_id, angle_offset))
+        for i = 0, 2 do
+            for j = 0, 3 do
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Rotation[%d][%d] = %.6f", entity_index, hitbox_id, angle_offset, i, j, rotation_matrix.m[i][j] or 0))
+            end
+        end
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Rotation matrix type: %s", entity_index, hitbox_id, angle_offset, type(rotation_matrix)))
+        if rotation_matrix.m then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Rotation matrix.m type: %s", entity_index, hitbox_id, angle_offset, type(rotation_matrix.m)))
+            if rotation_matrix.m[0] then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Rotation matrix.m[0] type: %s", entity_index, hitbox_id, angle_offset, type(rotation_matrix.m[0])))
+            end
+        end
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Rotation matrix creation complete, combining with hitbox matrix...", entity_index, hitbox_id, angle_offset))
+    end
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Created rotation matrix, combining matrices...", entity_index, hitbox_id, angle_offset))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Original hitbox matrix translation: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, angle_offset, 
+            hitbox_data.matrix.m[0][3] or 0, hitbox_data.matrix.m[1][3] or 0, hitbox_data.matrix.m[2][3] or 0))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Original hitbox matrix rotation - [0][0]=%.6f, [0][1]=%.6f, [1][0]=%.6f, [1][1]=%.6f", entity_index, hitbox_id, angle_offset, 
+            hitbox_data.matrix.m[0][0] or 0, hitbox_data.matrix.m[0][1] or 0, hitbox_data.matrix.m[1][0] or 0, hitbox_data.matrix.m[1][1] or 0))
+    end
+    
+    -- Комбинируем матрицы - исправленная логика
+    local combined_matrix = ffi.new("matrix3x4_t")
+    for i = 0, 2 do
+        for j = 0, 3 do
+            combined_matrix.m[i][j] = 0
+            for k = 0, 2 do
+                combined_matrix.m[i][j] = combined_matrix.m[i][j] + rotation_matrix.m[i][k] * hitbox_data.matrix.m[k][j]
+            end
+            if j == 3 then
+                -- Правильно обрабатываем перевод
+                combined_matrix.m[i][j] = combined_matrix.m[i][j] + hitbox_data.matrix.m[i][3]
+            end
+        end
+    end
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Matrix combination complete, combined matrix details:", entity_index, hitbox_id, angle_offset))
+        for i = 0, 2 do
+            for j = 0, 3 do
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Combined[%d][%d] = %.6f", entity_index, hitbox_id, angle_offset, i, j, combined_matrix.m[i][j] or 0))
+            end
+        end
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Combined matrix type: %s", entity_index, hitbox_id, angle_offset, type(combined_matrix)))
+        if combined_matrix.m then
+# debug_log(string.format("[ANALYZE-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Combined matrix.m type: %s", entity_index, hitbox_id, angle_offset, type(combined_matrix.m)))
+            if combined_matrix.m[0] then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Combined matrix.m[0] type: %s", entity_index, hitbox_id, angle_offset, type(combined_matrix.m[0])))
+            end
+        end
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Matrix combination complete, starting point transformation...", entity_index, hitbox_id, angle_offset))
+    end
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Combined matrix.m[0] type: %s", entity_index, hitbox_id, angle_offset, type(combined_matrix.m[0])))
+            end
+        end
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Matrix combination complete, transforming points...", entity_index, hitbox_id, angle_offset))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Starting point transformation with combined matrix...", entity_index, hitbox_id, angle_offset))
+    end
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Matrix combination complete, combined matrix [0][3]=%.3f, [1][3]=%.3f, [2][3]=%.3f", entity_index, hitbox_id, angle_offset, 
+            combined_matrix.m[0][3] or 0, combined_matrix.m[1][3] or 0, combined_matrix.m[2][3] or 0))
+    end
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Combined matrices, transforming points...", entity_index, hitbox_id, angle_offset))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Combined matrix details - [0][3]=%.6f, [1][3]=%.6f, [2][3]=%.6f", entity_index, hitbox_id, angle_offset, 
+            combined_matrix.m[0][3] or 0, combined_matrix.m[1][3] or 0, combined_matrix.m[2][3] or 0))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Combined matrix rotation - [0][0]=%.6f, [0][1]=%.6f, [1][0]=%.6f, [1][1]=%.6f", entity_index, hitbox_id, angle_offset, 
+            combined_matrix.m[0][0] or 0, combined_matrix.m[0][1] or 0, combined_matrix.m[1][0] or 0, combined_matrix.m[1][1] or 0))
+    end
+    
+    -- Трансформируем точки с новой матрицей
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Transforming center point with combined matrix...", entity_index, hitbox_id, angle_offset))
+    end
+    local center_rotated = transform_point_precise(combined_matrix, hitbox_data.center_local)
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Transforming mins point with combined matrix...", entity_index, hitbox_id, angle_offset))
+    end
+    local mins_rotated = transform_point_precise(combined_matrix, hitbox_data.mins_local)
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Transforming maxs point with combined matrix...", entity_index, hitbox_id, angle_offset))
+    end
+    local maxs_rotated = transform_point_precise(combined_matrix, hitbox_data.maxs_local)
+    
+    if not center_rotated or not mins_rotated or not maxs_rotated then 
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Failed to transform rotated points", entity_index, hitbox_id, angle_offset))
+        end
+        return nil 
+    end
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Successfully transformed rotated points", entity_index, hitbox_id, angle_offset))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Rotated center: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, angle_offset, 
+            center_rotated.x or 0, center_rotated.y or 0, center_rotated.z or 0))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Rotated center type: %s", entity_index, hitbox_id, angle_offset, type(center_rotated)))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Rotated mins: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, angle_offset, 
+            mins_rotated.x or 0, mins_rotated.y or 0, mins_rotated.z or 0))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Rotated mins type: %s", entity_index, hitbox_id, angle_offset, type(mins_rotated)))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Rotated maxs: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, angle_offset, 
+            maxs_rotated.x or 0, maxs_rotated.y or 0, maxs_rotated.z or 0))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Rotated maxs type: %s", entity_index, hitbox_id, angle_offset, type(maxs_rotated)))
+    end
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Transformed rotated points, getting original center...", entity_index, hitbox_id, angle_offset))
+    end
+    
+    -- Вычисляем смещение от оригинальной позиции
+    local original_center = transform_point_precise(hitbox_data.matrix, hitbox_data.center_local)
+    if not original_center then 
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Failed to get original center", entity_index, hitbox_id, angle_offset))
+        end
+        return nil 
+    end
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Got original center: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, angle_offset, 
+            original_center.x or 0, original_center.y or 0, original_center.z or 0))
+    end
+    
+    local desync_offset = {
+        x = (center_rotated.x or 0) - (original_center.x or 0),
+        y = (center_rotated.y or 0) - (original_center.y or 0),
+        z = (center_rotated.z or 0) - (original_center.z or 0)
+    }
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Desync offset: (%.2f,%.2f,%.2f)", entity_index, hitbox_id, angle_offset, desync_offset.x or 0, desync_offset.y or 0, desync_offset.z or 0))
+    end
+    
+    local desync_magnitude = math.sqrt((desync_offset.x or 0)^2 + (desync_offset.y or 0)^2 + (desync_offset.z or 0)^2)
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Desync offset components: x=%.6f, y=%.6f, z=%.6f", entity_index, hitbox_id, angle_offset, 
+            desync_offset.x or 0, desync_offset.y or 0, desync_offset.z or 0))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Desync magnitude calculation: sqrt(%.6f^2 + %.6f^2 + %.6f^2) = %.6f", entity_index, hitbox_id, angle_offset, 
+            (desync_offset.x or 0)^2, (desync_offset.y or 0)^2, (desync_offset.z or 0)^2, desync_magnitude))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Desync magnitude type: %s", entity_index, hitbox_id, angle_offset, type(desync_magnitude)))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Desync offset type: %s", entity_index, hitbox_id, angle_offset, type(desync_offset)))
+    end
+    
+    -- Ensure desync magnitude has a minimum meaningful value
+    if desync_magnitude < 0.001 then
+        desync_magnitude = 0.001
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Desync magnitude too small (%.6f), applying minimum threshold: %.6f", entity_index, hitbox_id, angle_offset, desync_magnitude, desync_magnitude))
+        end
+    end
+    
+    -- Additional debugging for desync magnitude calculation
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Desync offset components: x=%.6f, y=%.6f, z=%.6f", entity_index, hitbox_id, angle_offset, 
+            desync_offset.x or 0, desync_offset.y or 0, desync_offset.z or 0))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Desync magnitude calculation: sqrt(%.6f^2 + %.6f^2 + %.6f^2) = %.6f", entity_index, hitbox_id, angle_offset, 
+            (desync_offset.x or 0)^2, (desync_offset.y or 0)^2, (desync_offset.z or 0)^2, desync_magnitude))
+    end
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Desync analysis complete, magnitude: %.6f", entity_index, hitbox_id, angle_offset, desync_magnitude))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Desync offset: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, angle_offset, 
+            desync_offset.x or 0, desync_offset.y or 0, desync_offset.z or 0))
+        if center_rotated then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Rotated center: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, angle_offset, 
+                center_rotated.x or 0, center_rotated.y or 0, center_rotated.z or 0))
+        end
+        if original_center then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Original center: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, angle_offset, 
+                original_center.x or 0, original_center.y or 0, original_center.z or 0))
+        end
+    end
+    
+    local result = {
+        original_center = original_center,
+        rotated_center = center_rotated,
+        rotated_mins = mins_rotated,
+        rotated_maxs = maxs_rotated,
+        desync_offset = desync_offset,
+        desync_magnitude = desync_magnitude,
+        angle_offset = angle_offset,
+        matrix = combined_matrix,
+        original_matrix = hitbox_data.matrix
+    }
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f | Final result object:", entity_index, hitbox_id, angle_offset))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f |   original_center: %s (type: %s)", entity_index, hitbox_id, angle_offset, tostring(result.original_center), type(result.original_center)))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f |   rotated_center: %s (type: %s)", entity_index, hitbox_id, angle_offset, tostring(result.rotated_center), type(result.rotated_center)))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f |   rotated_mins: %s (type: %s)", entity_index, hitbox_id, angle_offset, tostring(result.rotated_mins), type(result.rotated_mins)))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f |   rotated_maxs: %s (type: %s)", entity_index, hitbox_id, angle_offset, tostring(result.rotated_maxs), type(result.rotated_maxs)))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f |   desync_offset: %s (type: %s)", entity_index, hitbox_id, angle_offset, tostring(result.desync_offset), type(result.desync_offset)))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f |   desync_magnitude: %s (type: %s)", entity_index, hitbox_id, angle_offset, tostring(result.desync_magnitude), type(result.desync_magnitude)))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f |   angle_offset: %s (type: %s)", entity_index, hitbox_id, angle_offset, tostring(result.angle_offset), type(result.angle_offset)))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f |   matrix: %s (type: %s)", entity_index, hitbox_id, angle_offset, tostring(result.matrix), type(result.matrix)))
+# debug_log(string.format("[ANALYZE-DESYNC-DEBUG] Entity: %s | Hitbox: %d | Angle: %.1f |   original_matrix: %s (type: %s)", entity_index, hitbox_id, angle_offset, tostring(result.original_matrix), type(result.original_matrix)))
+    end
+    
+    return result
+end
+
+-- Система предсказания хитбоксов через матрицу
+function predict_hitbox_via_matrix(entity_index, hitbox_id, prediction_time, velocity)
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Time: %.2f | Velocity: (%.2f,%.2f,%.2f) | Starting matrix prediction...", entity_index, hitbox_id, prediction_time, velocity.x or 0, velocity.y or 0, velocity.z or 0))
+    end
+    
+    local hitbox_data = get_hitbox_matrix_precise(entity_index, hitbox_id)
+    if not hitbox_data then 
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Failed to get hitbox data", entity_index, hitbox_id))
+        end
+        return nil 
+    end
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Got hitbox data, getting current center...", entity_index, hitbox_id))
+    end
+    
+    -- Получаем текущую позицию
+    local current_center = transform_point_precise(hitbox_data.matrix, hitbox_data.center_local)
+    if not current_center then 
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Failed to get current center", entity_index, hitbox_id))
+        end
+        return nil 
+    end
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Current center: (%.2f,%.2f,%.2f), calculating prediction...", entity_index, hitbox_id, current_center.x or 0, current_center.y or 0, current_center.z or 0))
+    end
+    
+    -- Предсказываем будущую позицию на основе скорости
+    local predicted_center = {
+        x = (current_center.x or 0) + ((velocity.x or 0) * prediction_time),
+        y = (current_center.y or 0) + ((velocity.y or 0) * prediction_time),
+        z = (current_center.z or 0) + ((velocity.z or 0) * prediction_time)
+    }
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Predicted center: (%.2f,%.2f,%.2f), creating offset matrix...", entity_index, hitbox_id, predicted_center.x or 0, predicted_center.y or 0, predicted_center.z or 0))
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Prediction calculation details:", entity_index, hitbox_id))
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   x = %.6f + (%.6f * %.6f) = %.6f", entity_index, hitbox_id, 
+            current_center.x or 0, velocity.x or 0, prediction_time, predicted_center.x or 0))
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   y = %.6f + (%.6f * %.6f) = %.6f", entity_index, hitbox_id, 
+            current_center.y or 0, velocity.y or 0, prediction_time, predicted_center.y or 0))
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   z = %.6f + (%.6f * %.6f) = %.6f", entity_index, hitbox_id, 
+            current_center.z or 0, velocity.z or 0, prediction_time, predicted_center.z or 0))
+    end
+    
+    -- Создаем матрицу смещения
+    local offset_matrix = ffi.new("matrix3x4_t")
+    for i = 0, 2 do
+        for j = 0, 3 do
+            offset_matrix.m[i][j] = hitbox_data.matrix.m[i][j]
+        end
+    end
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Time: %.3f | Created offset matrix:", entity_index, hitbox_id, prediction_time))
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Time: %.3f |   Original matrix translation: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, prediction_time, 
+            hitbox_data.matrix.m[0][3] or 0, hitbox_data.matrix.m[1][3] or 0, hitbox_data.matrix.m[2][3] or 0))
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Time: %.3f |   Velocity components: x=%.6f, y=%.6f, z=%.6f", entity_index, hitbox_id, prediction_time, 
+            velocity.x or 0, velocity.y or 0, velocity.z or 0))
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Time: %.3f |   Prediction time: %.6f", entity_index, hitbox_id, prediction_time, prediction_time))
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Time: %.3f |   Offset matrix type: %s", entity_index, hitbox_id, prediction_time, type(offset_matrix)))
+        if offset_matrix then
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Time: %.3f |   Offset matrix.m type: %s", entity_index, hitbox_id, prediction_time, type(offset_matrix.m)))
+            if offset_matrix.m then
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Time: %.3f |   Offset matrix.m[0] type: %s", entity_index, hitbox_id, prediction_time, type(offset_matrix.m[0])))
+            end
+        end
+    end
+    
+    -- Применяем смещение к матрице
+    offset_matrix.m[0][3] = offset_matrix.m[0][3] + ((velocity.x or 0) * prediction_time)
+    offset_matrix.m[1][3] = offset_matrix.m[1][3] + ((velocity.y or 0) * prediction_time)
+    offset_matrix.m[2][3] = offset_matrix.m[2][3] + ((velocity.z or 0) * prediction_time)
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Applied offset to matrix:", entity_index, hitbox_id))
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   Original translation: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, 
+            hitbox_data.matrix.m[0][3] or 0, hitbox_data.matrix.m[1][3] or 0, hitbox_data.matrix.m[2][3] or 0))
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   Offset: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, 
+            (velocity.x or 0) * prediction_time, (velocity.y or 0) * prediction_time, (velocity.z or 0) * prediction_time))
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   New translation: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, 
+            offset_matrix.m[0][3] or 0, offset_matrix.m[1][3] or 0, offset_matrix.m[2][3] or 0))
+    end
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Applied offset to matrix, transforming points...", entity_index, hitbox_id))
+    end
+    
+    -- Трансформируем точки с предсказанной матрицей
+    local predicted_mins = transform_point_precise(offset_matrix, hitbox_data.mins_local)
+    local predicted_maxs = transform_point_precise(offset_matrix, hitbox_data.maxs_local)
+    
+    if not predicted_mins or not predicted_maxs then 
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Failed to transform predicted points", entity_index, hitbox_id))
+        end
+        return nil 
+    end
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Time: %.3f | Successfully transformed predicted points:", entity_index, hitbox_id, prediction_time))
+        if predicted_mins then
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Time: %.3f |   Predicted mins: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, prediction_time, 
+                predicted_mins.x or 0, predicted_mins.y or 0, predicted_mins.z or 0))
+        end
+        if predicted_maxs then
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Time: %.3f |   Predicted maxs: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, prediction_time, 
+                predicted_maxs.x or 0, predicted_maxs.y or 0, predicted_maxs.z or 0))
+        end
+    end
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Successfully transformed predicted points:", entity_index, hitbox_id))
+        if predicted_mins then
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   Predicted mins: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, 
+                predicted_mins.x or 0, predicted_mins.y or 0, predicted_mins.z or 0))
+        end
+        if predicted_maxs then
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   Predicted maxs: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, 
+                predicted_maxs.x or 0, predicted_maxs.y or 0, predicted_maxs.z or 0))
+        end
+    end
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Successfully created prediction", entity_index, hitbox_id))
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Final prediction details:", entity_index, hitbox_id))
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   Current center: (%.2f,%.2f,%.2f)", entity_index, hitbox_id, 
+            current_center.x or 0, current_center.y or 0, current_center.z or 0))
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   Predicted center: (%.2f,%.2f,%.2f)", entity_index, hitbox_id, 
+            predicted_center.x or 0, predicted_center.y or 0, predicted_center.z or 0))
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   Prediction time: %.2f", entity_index, hitbox_id, prediction_time))
+    end
+    
+    local result = {
+        current_center = current_center,
+        predicted_center = predicted_center,
+        predicted_mins = predicted_mins,
+        predicted_maxs = predicted_maxs,
+        prediction_time = prediction_time,
+        velocity = velocity,
+        matrix = offset_matrix,
+        original_matrix = hitbox_data.matrix
+    }
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Time: %.3f | Returning prediction result with %d fields", entity_index, hitbox_id, prediction_time, 
+            (result.current_center and 1 or 0) + (result.predicted_center and 1 or 0) + (result.predicted_mins and 1 or 0) + (result.predicted_maxs and 1 or 0) + 4))
+        if result.current_center then
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Time: %.3f |   Current center: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, prediction_time, 
+                result.current_center.x or 0, result.current_center.y or 0, result.current_center.z or 0))
+        end
+        if result.predicted_center then
+# debug_log(string.format("[PREDICT-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Time: %.3f |   Predicted center: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, prediction_time, 
+                result.predicted_center.x or 0, result.predicted_center.y or 0, result.predicted_center.z or 0))
+        end
+    end
+    
+    return result
+end
+
+-- Анализ пересечений хитбоксов через матрицу
+function analyze_hitbox_intersection_via_matrix(entity_index, hitbox_id, ray_start, ray_end)
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[INTERSECTION-DEBUG] Entity: %s | Hitbox: %d | Analyzing intersection...", entity_index, hitbox_id))
+    end
+    
+    local hitbox_data = get_hitbox_matrix_precise(entity_index, hitbox_id)
+    if not hitbox_data then 
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[INTERSECTION-DEBUG] Entity: %s | Hitbox: %d | Failed to get hitbox data", entity_index, hitbox_id))
+        end
+        return nil 
+    end
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[INTERSECTION-DEBUG] Entity: %s | Hitbox: %d | Got hitbox data, transforming ray to local coordinates...", entity_index, hitbox_id))
+    end
+    
+    -- Трансформируем луч в локальные координаты хитбокса
+    local local_ray_start = {
+        x = (ray_start.x or 0) - (hitbox_data.matrix.m[0][3] or 0),
+        y = (ray_start.y or 0) - (hitbox_data.matrix.m[1][3] or 0),
+        z = (ray_start.z or 0) - (hitbox_data.matrix.m[2][3] or 0)
+    }
+    
+    local local_ray_end = {
+        x = (ray_end.x or 0) - (hitbox_data.matrix.m[1][3] or 0),
+        y = (ray_end.y or 0) - (hitbox_data.matrix.m[1][3] or 0),
+        z = (ray_end.z or 0) - (hitbox_data.matrix.m[2][3] or 0)
+    }
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[INTERSECTION-DEBUG] Entity: %s | Hitbox: %d | Local ray: start(%.2f,%.2f,%.2f) -> end(%.2f,%.2f,%.2f)", entity_index, hitbox_id, 
+            local_ray_start.x or 0, local_ray_start.y or 0, local_ray_start.z or 0,
+            local_ray_end.x or 0, local_ray_end.y or 0, local_ray_end.z or 0))
+        
+        -- Вычисляем длину луча
+        local ray_length = math.sqrt((local_ray_end.x - local_ray_start.x)^2 + (local_ray_end.y - local_ray_start.y)^2 + (local_ray_end.z - local_ray_start.z)^2)
+# debug_log(string.format("[INTERSECTION-DEBUG] Entity: %s | Hitbox: %d | Ray length: %.2f", entity_index, hitbox_id, ray_length))
+    end
+    
+    -- Вычисляем направление луча
+    local ray_direction = {
+        x = local_ray_end.x - local_ray_start.x,
+        y = local_ray_end.y - local_ray_start.y,
+        z = local_ray_end.z - local_ray_start.z
+    }
+    
+    local ray_length = math.sqrt(ray_direction.x^2 + ray_direction.y^2 + ray_direction.z^2)
+    if ray_length < 0.001 then 
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[INTERSECTION-DEBUG] Entity: %s | Hitbox: %d | Ray length too small: %.6f", entity_index, hitbox_id, ray_length))
+        end
+        return nil 
+    end
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[INTERSECTION-DEBUG] Entity: %s | Hitbox: %d | Ray length: %.2f, normalizing direction...", entity_index, hitbox_id, ray_length))
+    end
+    
+    -- Нормализуем направление
+    ray_direction.x = ray_direction.x / ray_length
+    ray_direction.y = ray_direction.y / ray_length
+    ray_direction.z = ray_direction.z / ray_length
+    
+    -- Проверяем пересечение с AABB хитбокса
+    local t_min = -math.huge
+    local t_max = math.huge
+    
+    for i = 0, 2 do
+        local axis_min = hitbox_data.mins_local[i == 0 and "x" or i == 1 and "y" or "z"]
+        local axis_max = hitbox_data.maxs_local[i == 0 and "x" or i == 1 and "y" or "z"]
+        local ray_origin = i == 0 and local_ray_start.x or i == 1 and local_ray_start.y or local_ray_start.z
+        local ray_dir = i == 0 and ray_direction.x or i == 1 and ray_direction.y or local_ray_start.z
+        
+        if math.abs(ray_dir) > 0.001 then
+            local t1 = (axis_min - ray_origin) / ray_dir
+            local t2 = (axis_max - ray_origin) / ray_dir
+            
+            if t1 > t2 then
+                local temp = t1
+                t1 = t2
+                t2 = temp
+            end
+            
+            if t1 > t_min then t_min = t1 end
+            if t2 < t_max then t_max = t2 end
+        end
+    end
+    
+    -- Проверяем валидность пересечения
+    if t_min > t_max or t_max < 0 then 
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[INTERSECTION-DEBUG] Entity: %s | Hitbox: %d | Invalid intersection: t_min=%.2f, t_max=%.2f", entity_index, hitbox_id, t_min, t_max))
+        end
+        return nil 
+    end
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[INTERSECTION-DEBUG] Entity: %s | Hitbox: %d | Valid intersection: t_min=%.2f, t_max=%.2f", entity_index, hitbox_id, t_min, t_max))
+    end
+    
+    -- Вычисляем точку пересечения
+    local intersection_local = {
+        x = local_ray_start.x + ray_direction.x * t_min,
+        y = local_ray_start.y + ray_direction.y * t_min,
+        z = local_ray_start.z + ray_direction.z * t_min
+    }
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[INTERSECTION-DEBUG] Entity: %s | Hitbox: %d | Local intersection: (%.2f,%.2f,%.2f)", entity_index, hitbox_id, 
+            intersection_local.x or 0, intersection_local.y or 0, intersection_local.z or 0))
+    end
+    
+    -- Трансформируем обратно в мировые координаты
+    local intersection_world = transform_point_precise(hitbox_data.matrix, intersection_local)
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[INTERSECTION-DEBUG] Entity: %s | Hitbox: %d | World intersection: (%.2f,%.2f,%.2f), distance: %.2f", entity_index, hitbox_id, 
+            intersection_world.x or 0, intersection_world.y or 0, intersection_world.z or 0, t_min))
+# debug_log(string.format("[INTERSECTION-DEBUG] Entity: %s | Hitbox: %d | Intersection calculation: local(%.6f,%.6f,%.6f) -> world(%.6f,%.6f,%.6f)", entity_index, hitbox_id, 
+            intersection_local.x or 0, intersection_local.y or 0, intersection_local.z or 0,
+            intersection_world.x or 0, intersection_world.y or 0, intersection_world.z or 0))
+    end
+    
+    local result = {
+        intersection = intersection_world,
+        distance = t_min,
+        hitbox_data = hitbox_data,
+        ray_start = ray_start,
+        ray_end = ray_end,
+        local_intersection = intersection_local
+    }
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[INTERSECTION-DEBUG] Entity: %s | Hitbox: %d | Returning intersection result with %d fields", entity_index, hitbox_id, 
+            (result.intersection and 1 or 0) + (result.distance and 1 or 0) + (result.hitbox_data and 1 or 0) + 3))
+    end
+    
+    return result
+end
+
+-- Система валидации хитбоксов через матрицу
+function validate_hitbox_via_matrix(entity_index, hitbox_id, angle_offsets)
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Starting validation with %d angles...", entity_index, hitbox_id, #angle_offsets))
+    end
+    
+    if not angle_offsets or #angle_offsets == 0 then 
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | No angle offsets provided", entity_index, hitbox_id))
+        end
+        return nil 
+    end
+    
+    local validation_results = {}
+    
+    for _, angle_offset in ipairs(angle_offsets) do
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Analyzing angle offset: %.1f", entity_index, hitbox_id, angle_offset))
+        end
+        
+        local desync_analysis = analyze_desync_via_hitbox_matrix(entity_index, hitbox_id, angle_offset)
+        if desync_analysis then
+            if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Angle %.1f analysis successful, desync: %.2f", entity_index, hitbox_id, angle_offset, desync_analysis.desync_magnitude or 0))
+            end
+            
+            table.insert(validation_results, {
+                angle_offset = angle_offset,
+                desync_magnitude = desync_analysis.desync_magnitude or 0,
+                desync_offset = desync_analysis.desync_offset or {x=0, y=0, z=0},
+                matrix = desync_analysis.matrix
+            })
+        else
+            if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Angle %.1f analysis failed", entity_index, hitbox_id, angle_offset))
+            end
+        end
+    end
+    
+    if #validation_results == 0 then 
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | No successful analyses, returning nil", entity_index, hitbox_id))
+        end
+        return nil 
+    end
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Got %d successful analyses, sorting...", entity_index, hitbox_id, #validation_results))
+        for i, result_item in ipairs(validation_results) do
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Pre-sort result %d: angle=%.1f, desync=%.6f, offset=(%.6f,%.6f,%.6f)", 
+                entity_index, hitbox_id, i, result_item.angle_offset or 0, result_item.desync_magnitude or 0, 
+                result_item.desync_offset.x or 0, result_item.desync_offset.y or 0, result_item.desync_offset.z or 0))
+        end
+    end
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Pre-sort validation results:", entity_index, hitbox_id))
+        for i, result_item in ipairs(validation_results) do
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   Result %d: angle=%.1f, desync=%.6f, offset=(%.6f,%.6f,%.6f)", 
+                entity_index, hitbox_id, i, result_item.angle_offset or 0, result_item.desync_magnitude or 0, 
+                result_item.desync_offset.x or 0, result_item.desync_offset.y or 0, result_item.desync_offset.z or 0))
+        end
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Raw, unsorted results:", entity_index, hitbox_id))
+        for i, result_item in ipairs(validation_results) do
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   Raw result %d: angle=%.1f, desync=%.6f, offset=(%.6f,%.6f,%.6f)", 
+                entity_index, hitbox_id, i, result_item.angle_offset or 0, result_item.desync_magnitude or 0, 
+                result_item.desync_offset.x or 0, result_item.desync_offset.y or 0, result_item.desync_offset.z or 0))
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   Raw result %d type: %s", entity_index, hitbox_id, i, type(result_item)))
+            if result_item.angle_offset then
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   Raw result %d angle_offset type: %s", entity_index, hitbox_id, i, type(result_item.angle_offset)))
+            end
+            if result_item.desync_magnitude then
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   Raw result %d desync_magnitude type: %s", entity_index, hitbox_id, i, type(result_item.desync_magnitude)))
+            end
+            if result_item.desync_offset then
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   Raw result %d desync_offset type: %s", entity_index, hitbox_id, i, type(result_item.desync_offset)))
+            end
+        end
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Validation results count: %d", entity_index, hitbox_id, #validation_results))
+        if #validation_results > 0 then
+            local first_result = validation_results[1]
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | First result type: %s", entity_index, hitbox_id, type(first_result)))
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | First result fields: %s", entity_index, hitbox_id, 
+                table.concat({first_result.angle_offset and "angle_offset" or "", first_result.desync_magnitude and "desync_magnitude" or "", 
+                             first_result.desync_offset and "desync_offset" or ""}, ", ")))
+        end
+    end
+    
+    -- Сортируем по величине десинка
+    table.sort(validation_results, function(a, b)
+        return (a.desync_magnitude or 0) > (b.desync_magnitude or 0)
+    end)
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Sorted validation results by desync magnitude", entity_index, hitbox_id))
+        for i, result_item in ipairs(validation_results) do
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Result %d: angle=%.1f, desync=%.2f", 
+                entity_index, hitbox_id, i, result_item.angle_offset or 0, result_item.desync_magnitude or 0))
+        end
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Post-sort validation results:", entity_index, hitbox_id))
+        for i, result_item in ipairs(validation_results) do
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   Post-sort result %d: angle=%.1f, desync=%.6f, offset=(%.6f,%.6f,%.6f)", 
+                entity_index, hitbox_id, i, result_item.angle_offset or 0, result_item.desync_magnitude or 0, 
+                result_item.desync_offset.x or 0, result_item.desync_offset.y or 0, result_item.desync_offset.z or 0))
+        end
+    end
+    
+    local result = {
+        results = validation_results,
+        best_angle = validation_results[1].angle_offset,
+        best_desync = validation_results[1].desync_magnitude or 0,
+        total_results = #validation_results
+    }
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Validation complete, best angle: %.1f, best desync: %.2f", entity_index, hitbox_id, result.best_angle or 0, result.best_desync or 0))
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Final result object:", entity_index, hitbox_id))
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   best_angle: %s (type: %s)", entity_index, hitbox_id, tostring(result.best_angle), type(result.best_angle)))
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   best_desync: %s (type: %s)", entity_index, hitbox_id, tostring(result.best_desync), type(result.best_desync)))
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   total_results: %s (type: %s)", entity_index, hitbox_id, tostring(result.total_results), type(result.total_results)))
+# debug_log(string.format("[VALIDATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   results count: %s (type: %s)", entity_index, hitbox_id, tostring(#result.results), type(result.results)))
+    end
+    
+    return result
+end
+
+-- Кэширование результатов анализа хитбоксов
+local hitbox_analysis_cache = { tick = -1, per_entity = {} }
+
+function get_cached_hitbox_analysis(entity_index, hitbox_id, angle_offset)
+    local current_tick = globals.tickcount()
+    
+    if hitbox_analysis_cache.tick ~= current_tick then
+        hitbox_analysis_cache.tick = current_tick
+        hitbox_analysis_cache.per_entity = {}
+    end
+    
+    local entity_cache = hitbox_analysis_cache.per_entity[entity_index] or {}
+    local cache_key = string.format("%d_%.2f", hitbox_id, angle_offset or 0)
+    
+    if entity_cache[cache_key] then
+        return entity_cache[cache_key]
+    end
+    
+    local analysis = analyze_desync_via_hitbox_matrix(entity_index, hitbox_id, angle_offset)
+    if analysis then
+        entity_cache[cache_key] = analysis
+        hitbox_analysis_cache.per_entity[entity_index] = entity_cache
+    end
+    
+    return analysis
+end
+
+-- === ENHANCED HITBOX MATRIX RESOLVING SYSTEM ===
+-- Система резольвинга через матрицу хитбоксов для максимальной точности
+
+function resolve_via_hitbox_matrix(entity_index, hitbox_id, base_desync, confidence)
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Base desync: %.2f | Confidence: %.2f | Starting matrix resolution...", entity_index, hitbox_id, base_desync or 0, confidence or 0))
+    end
+    
+    local hitbox_data = get_hitbox_matrix_precise(entity_index, hitbox_id)
+    if not hitbox_data then 
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Failed to get hitbox data, returning base values", entity_index, hitbox_id))
+        end
+        return base_desync, confidence 
+    end
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Successfully got hitbox data", entity_index, hitbox_id))
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Hitbox data type: %s", entity_index, hitbox_id, type(hitbox_data)))
+        if hitbox_data.matrix then
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Hitbox matrix translation: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, 
+                hitbox_data.matrix.m[0][3] or 0, hitbox_data.matrix.m[1][3] or 0, hitbox_data.matrix.m[2][3] or 0))
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Hitbox matrix type: %s", entity_index, hitbox_id, type(hitbox_data.matrix)))
+            if hitbox_data.matrix.m then
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Hitbox matrix.m type: %s", entity_index, hitbox_id, type(hitbox_data.matrix.m)))
+            end
+        end
+        if hitbox_data.center_local then
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Local center: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, 
+                hitbox_data.center_local.x or 0, hitbox_data.center_local.y or 0, hitbox_data.center_local.z or 0))
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Local center type: %s", entity_index, hitbox_id, type(hitbox_data.center_local)))
+        end
+        if hitbox_data.mins_local then
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Local mins: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, 
+                hitbox_data.mins_local.x or 0, hitbox_data.mins_local.y or 0, hitbox_data.mins_local.z or 0))
+        end
+        if hitbox_data.maxs_local then
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Local maxs: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, 
+                hitbox_data.maxs_local.x or 0, hitbox_data.maxs_local.y or 0, hitbox_data.maxs_local.z or 0))
+        end
+    end
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Got hitbox data, analyzing angles...", entity_index, hitbox_id))
+    end
+    
+    -- Анализируем различные углы десинка - увеличенные для лучшего обнаружения
+    local test_angles = {-120, -90, -60, -30, 0, 30, 60, 90, 120}
+    local validation = validate_hitbox_via_matrix(entity_index, hitbox_id, test_angles)
+    
+    if not validation then 
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Failed to validate hitbox, returning base values", entity_index, hitbox_id))
+        end
+        return base_desync, confidence 
+    end
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Successfully validated hitbox", entity_index, hitbox_id))
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Validation object: %s", entity_index, hitbox_id, tostring(validation)))
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Validation object type: %s", entity_index, hitbox_id, type(validation)))
+        if validation.best_desync then
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Best desync: %.6f", entity_index, hitbox_id, validation.best_desync or 0))
+        end
+        if validation.best_angle then
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Best angle: %.1f", entity_index, hitbox_id, validation.best_angle or 0))
+        end
+        if validation.best_desync_offset then
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Best desync offset: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, 
+                validation.best_desync_offset.x or 0, validation.best_desync_offset.y or 0, validation.best_desync_offset.z or 0))
+        end
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Validation fields: %s", entity_index, hitbox_id, 
+            table.concat({validation.best_desync and "best_desync" or "", validation.best_angle and "best_angle" or "", 
+                         validation.best_desync_offset and "best_desync_offset" or ""}, ", ")))
+    end
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Successfully validated hitbox", entity_index, hitbox_id))
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Validation object: %s", entity_index, hitbox_id, tostring(validation)))
+        if validation.best_desync then
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Best desync: %.6f", entity_index, hitbox_id, validation.best_desync or 0))
+        end
+        if validation.best_angle then
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Best angle: %.1f", entity_index, hitbox_id, validation.best_angle or 0))
+        end
+    end
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Validation successful, calculating correction...", entity_index, hitbox_id))
+    end
+    
+    -- Находим лучший угол на основе анализа хитбокса
+    local best_angle = validation.best_angle
+    local best_desync = validation.best_desync
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Best angle: %.1f | Best desync: %.2f", entity_index, hitbox_id, best_angle or 0, best_desync or 0))
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Validation object: %s", entity_index, hitbox_id, tostring(validation)))
+        if validation.results then
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Validation results count: %d", entity_index, hitbox_id, #validation.results))
+            for i, result in ipairs(validation.results) do
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Result %d: angle=%.1f, desync=%.6f", 
+                    entity_index, hitbox_id, i, result.angle_offset or 0, result.desync_magnitude or 0))
+            end
+        end
+    end
+    
+    -- Корректируем базовый десинк на основе анализа матрицы
+    local matrix_correction = (best_desync or 0) * (confidence or 0.5)
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Matrix correction calculation: %.6f * %.6f = %.6f", entity_index, hitbox_id, best_desync or 0, confidence or 0.5, matrix_correction))
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Matrix correction type: %s", entity_index, hitbox_id, type(matrix_correction)))
+    end
+    
+    -- Ensure matrix correction has a minimum meaningful value
+    if math.abs(matrix_correction) < 0.001 then
+        matrix_correction = 0.001 * (matrix_correction >= 0 and 1 or -1)
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Matrix correction too small (%.6f), applying minimum threshold: %.6f", entity_index, hitbox_id, matrix_correction, matrix_correction))
+        end
+    end
+    
+    local corrected_desync = (base_desync or 0) + matrix_correction
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Raw values - best_desync: %.6f, confidence: %.6f, base_desync: %.6f", entity_index, hitbox_id, best_desync or 0, confidence or 0.5, base_desync or 0))
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Matrix correction calculation: (%.6f * %.6f) = %.6f", entity_index, hitbox_id, best_desync or 0, confidence or 0.5, matrix_correction))
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Corrected desync calculation: (%.6f + %.6f) = %.6f", entity_index, hitbox_id, base_desync or 0, matrix_correction, corrected_desync))
+    end
+    
+    -- Улучшаем уверенность на основе качества анализа
+    local matrix_confidence = math.min(1.0, (confidence or 0) + ((validation.total_results or 0) / #test_angles) * 0.2)
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Matrix confidence calculation: min(1.0, %.2f + (%.2f / %d) * 0.2) = %.2f", entity_index, hitbox_id, confidence or 0, validation.total_results or 0, #test_angles, matrix_confidence))
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Matrix correction: %.2f | Corrected desync: %.2f | Matrix confidence: %.2f", entity_index, hitbox_id, matrix_correction, corrected_desync, matrix_confidence))
+# debug_log(string.format("[RESOLVE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Final return values: corrected_desync=%.6f (type: %s), matrix_confidence=%.6f (type: %s)", entity_index, hitbox_id, corrected_desync, type(corrected_desync), matrix_confidence, type(matrix_confidence)))
+    end
+    
+    return corrected_desync, matrix_confidence
+end
+
+-- Интеграция матрицы хитбоксов в основной резольвинг
+function integrate_hitbox_matrix_resolving(entity_index, base_desync, confidence, hitbox_id)
+    hitbox_id = hitbox_id or 0 -- По умолчанию используем голову
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Base desync: %.2f | Confidence: %.2f | Starting integration...", entity_index, hitbox_id, base_desync or 0, confidence or 0))
+    end
+    
+    -- Получаем анализ через матрицу хитбоксов
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Calling resolve_via_hitbox_matrix with: base_desync=%.6f (type: %s), confidence=%.6f (type: %s)", entity_index, hitbox_id, base_desync or 0, type(base_desync), confidence or 0, type(confidence)))
+    end
+    local matrix_desync, matrix_confidence = resolve_via_hitbox_matrix(entity_index, hitbox_id, base_desync, confidence)
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Matrix desync: %.2f | Matrix confidence: %.2f", entity_index, hitbox_id, matrix_desync or 0, matrix_confidence or 0))
+# debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Matrix desync type: %s | Matrix confidence type: %s", entity_index, hitbox_id, type(matrix_desync), type(matrix_confidence)))
+    end
+    
+    -- Предсказываем будущую позицию хитбокса
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Calling predict_hitbox_for_resolving with: entity_index=%s, hitbox_id=%s, time=0.1", entity_index, hitbox_id, tostring(entity_index), tostring(hitbox_id)))
+    end
+    local prediction = predict_hitbox_for_resolving(entity_index, hitbox_id, 0.1) -- 100ms вперед
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Prediction result: %s", entity_index, hitbox_id, tostring(prediction)))
+# debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Prediction type: %s", entity_index, hitbox_id, type(prediction)))
+        if prediction then
+# debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Prediction details - current:(%.2f,%.2f,%.2f) predicted:(%.2f,%.2f,%.2f)", 
+                entity_index, hitbox_id,
+                prediction.current_center.x or 0, prediction.current_center.y or 0, prediction.current_center.z or 0,
+                prediction.predicted_center.x or 0, prediction.predicted_center.y or 0, prediction.predicted_center.z or 0))
+        end
+    end
+    
+    local final_desync = matrix_desync
+    local final_confidence = matrix_confidence
+    
+    -- Если есть предсказание, корректируем десинк
+    if prediction then
+        local prediction_correction = (prediction.predicted_center.x or 0) - (prediction.current_center.x or 0)
+        final_desync = final_desync + (prediction_correction * 0.3)
+        final_confidence = math.min(1.0, final_confidence + 0.1)
+        
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Prediction correction calculation: (%.2f - %.2f) = %.2f", entity_index, hitbox_id, prediction.predicted_center.x or 0, prediction.current_center.x or 0, prediction_correction))
+# debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Applied prediction correction: %.2f", entity_index, hitbox_id, prediction_correction))
+        end
+    end
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Final desync: %.2f | Final confidence: %.2f", entity_index, hitbox_id, final_desync, final_confidence))
+# debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Final desync type: %s | Final confidence type: %s", entity_index, hitbox_id, type(final_desync), type(final_confidence)))
+    end
+    
+    local result = {
+        desync = final_desync,
+        confidence = final_confidence,
+        matrix_analysis = true,
+        hitbox_id = hitbox_id,
+        prediction = prediction
+    }
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d | Final result object:", entity_index, hitbox_id))
+# debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   desync: %s (type: %s)", entity_index, hitbox_id, tostring(result.desync), type(result.desync)))
+# debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   confidence: %s (type: %s)", entity_index, hitbox_id, tostring(result.confidence), type(result.confidence)))
+# debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   matrix_analysis: %s (type: %s)", entity_index, hitbox_id, tostring(result.matrix_analysis), type(result.matrix_analysis)))
+# debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   hitbox_id: %s (type: %s)", entity_index, hitbox_id, tostring(result.hitbox_id), type(result.hitbox_id)))
+# debug_log(string.format("[INTEGRATE-MATRIX-DEBUG] Entity: %s | Hitbox: %d |   prediction: %s (type: %s)", entity_index, hitbox_id, tostring(result.prediction), type(result.prediction)))
+    end
+    
+    return result
+end
 
 -- UI Menu Creation
 local ui_get = ui.get
 
 -- UI Elements
 
-local riptide_v3_debug = ui.new_checkbox("rage", "other", "Debug Logs")
+riptide_v5_debug = ui.new_checkbox("rage", "other", "Debug Logs")
+
+-- === AUTOMATIC SYSTEMS ===
+-- Все системы работают автоматически без UI элементов
+local fake_lag_detection_enabled = { get = function() return true end }
+local hitbox_matrix_resolving = { get = function() return true end }
+local hitbox_matrix_debug = { get = function() return ui.get(riptide_v5_debug) end }
+local hitbox_matrix_quality = { get = function() return 4 end } -- Автоматическое качество 4x
+local hitbox_matrix_prediction = { get = function() return 120 end } -- Автоматическое предсказание 120ms
 
 -- Core variables and references
 local client_camera_angles = client.camera_angles
@@ -127,7 +1823,84 @@ local function normalize_angle_safe(angle)
     return safe_angle
 end
 
--- Исправленная функция vector_new для правильной обработки entity_get_origin
+-- Global freestand bias helper for other scripts (map-aware, bbox multipoint)
+function compute_freestand_bias(entity_index)
+    local lp = entity_get_local_player()
+    if not lp then return {dir = 0, confidence = 0} end
+
+    -- Map profile (simple)
+    local map = (globals.mapname and globals.mapname()) or (client.get_mapname and client.get_mapname()) or 'default'
+    map = tostring(map):lower()
+    local offset = (map:find('inferno') and 14) or (map:find('overpass') and 13) or (map:find('nuke') and 11) or 12
+
+    -- Eye position (normalize both formats)
+    local e1, e2, e3 = client_eye_position()
+    local ex1, ey1, ez1
+    if type(e1) == 'number' and type(e2) == 'number' and type(e3) == 'number' then
+        ex1, ey1, ez1 = e1, e2, e3
+    elseif type(e1) == 'table' and e1[1] and e1[2] and e1[3] then
+        ex1, ey1, ez1 = e1[1], e1[2], e1[3]
+    else
+        return {dir = 0, confidence = 0}
+    end
+
+    local head = get_hitbox_center(entity_index, 0)
+    local bbox = get_hitbox_bbox_via_studio and get_hitbox_bbox_via_studio(entity_index, 0)
+
+    local function sample_face_points(left)
+        local pts = {}
+        if bbox and bbox.mins and bbox.maxs and bbox.center then
+            local cx, cy, cz = bbox.center.x, bbox.center.y, bbox.center.z
+            local mx, my, mz = bbox.mins.x, bbox.mins.y, bbox.mins.z
+            local Mx, My, Mz = bbox.maxs.x, bbox.maxs.y, bbox.maxs.z
+            if left then
+                table.insert(pts, {x = mx, y = cy, z = cz})
+                table.insert(pts, {x = mx, y = My, z = cz})
+                table.insert(pts, {x = mx, y = my, z = cz})
+            else
+                table.insert(pts, {x = Mx, y = cy, z = cz})
+                table.insert(pts, {x = Mx, y = My, z = cz})
+                table.insert(pts, {x = Mx, y = my, z = cz})
+            end
+        else
+            -- Fallback: yaw-based left/right offsets from center
+            local ex, ey, ez = entity_get_origin(entity_index)
+            local lx, ly, lz = entity_get_origin(lp)
+            if not ex or not lx then return pts end
+            local to_local_yaw = math_deg(math_atan2(ly - ey, lx - ex))
+            local yaw_rad = (to_local_yaw + 90) * math.pi / 180
+            local left_pt  = {x = head.x + math.cos(yaw_rad) * offset, y = head.y + math.sin(yaw_rad) * offset, z = head.z}
+            local right_pt = {x = head.x - math.cos(yaw_rad) * offset, y = head.y - math.sin(yaw_rad) * offset, z = head.z}
+            table.insert(pts, left and left_pt or right_pt)
+        end
+        return pts
+    end
+
+    local function best_frac(pts)
+        local best = 0
+        for _, p in ipairs(pts) do
+            local ok, trb = pcall(function()
+                return client.trace_bullet(lp, ex1, ey1, ez1, p.x, p.y, p.z, entity_index)
+            end)
+            if ok and trb and trb.fraction and trb.fraction > best then best = trb.fraction end
+        end
+        if best == 0 then
+            for _, p in ipairs(pts) do
+                local tl = client_trace_line(ex1, ey1, ez1, p.x, p.y, p.z, entity_index)
+                local frac = type(tl) == 'number' and tl or (tl and tl.fraction) or 0
+                if frac > best then best = frac end
+            end
+        end
+        return best
+    end
+
+    local fl = best_frac(sample_face_points(true))
+    local fr = best_frac(sample_face_points(false))
+    local dir = 0
+    if math_abs(fl - fr) > 0.05 then dir = (fr > fl) and 1 or -1 end
+    local confidence = math_min(1.0, math_abs(fl - fr) * 2)
+    return {dir = dir, confidence = confidence}
+end
 
 -- Также исправим функцию vector_new для более надежной работы
 local function vector_new(x, y, z)
@@ -147,10 +1920,134 @@ local function vector_new(x, y, z)
     end
 end
 
+-- Система предсказания хитбоксов для резольвинга
+function predict_hitbox_for_resolving(entity_index, hitbox_id, time_ahead)
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Time ahead: %.2f | Starting prediction...", entity_index, hitbox_id, time_ahead))
+    end
+    
+    local entity = entity_index
+    if not entity then 
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Entity is nil", entity_index, hitbox_id))
+        end
+        return nil 
+    end
+    
+    -- Получаем скорость по каждой оси отдельно
+    local velocity_x = entity_get_prop(entity, "m_vecVelocity[0]") or 0
+    local velocity_y = entity_get_prop(entity, "m_vecVelocity[1]") or 0
+    local velocity_z = entity_get_prop(entity, "m_vecVelocity[2]") or 0
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Raw velocity components: x=%.6f, y=%.6f, z=%.6f", entity_index, hitbox_id, velocity_x, velocity_y, velocity_z))
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Velocity magnitude: %.6f", entity_index, hitbox_id, math.sqrt(velocity_x^2 + velocity_y^2 + velocity_z^2)))
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Velocity calculation: sqrt(%.6f^2 + %.6f^2 + %.6f^2) = %.6f", entity_index, hitbox_id, 
+            velocity_x, velocity_y, velocity_z, math.sqrt(velocity_x^2 + velocity_y^2 + velocity_z^2)))
+    end
+    
+    local velocity = {x = velocity_x, y = velocity_y, z = velocity_z}
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Constructed velocity vector: %s", entity_index, hitbox_id, tostring(velocity)))
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Velocity vector type: %s", entity_index, hitbox_id, type(velocity)))
+    end
+    
+    if velocity_x == 0 and velocity_y == 0 and velocity_z == 0 then
+        if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Zero velocity detected", entity_index, hitbox_id))
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Velocity components: x=%.6f, y=%.6f, z=%.6f", entity_index, hitbox_id, velocity_x, velocity_y, velocity_z))
+        end
+        return nil
+    end
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Non-zero velocity confirmed, proceeding with prediction", entity_index, hitbox_id))
+    end
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Got velocity: (%.6f,%.6f,%.6f), calling predict_hitbox_via_matrix...", entity_index, hitbox_id, velocity.x or 0, velocity.y or 0, velocity.z or 0))
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Time ahead: %.6f, velocity magnitude: %.6f", entity_index, hitbox_id, time_ahead, math.sqrt((velocity.x or 0)^2 + (velocity.y or 0)^2 + (velocity.z or 0)^2)))
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Parameters for predict_hitbox_via_matrix: entity_index=%s, hitbox_id=%d, time_ahead=%.6f", entity_index, hitbox_id, tostring(entity_index), hitbox_id, time_ahead))
+    end
+    
+    local prediction = predict_hitbox_via_matrix(entity_index, hitbox_id, time_ahead, velocity)
+    if not prediction then 
+            if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | predict_hitbox_via_matrix returned nil", entity_index, hitbox_id))
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Parameters passed: time_ahead=%.6f, velocity=(%.6f,%.6f,%.6f)", entity_index, hitbox_id, 
+            time_ahead, velocity.x or 0, velocity.y or 0, velocity.z or 0))
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Velocity type: %s, time_ahead type: %s", entity_index, hitbox_id, type(velocity), type(time_ahead)))
+    end
+        return nil 
+    end
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | predict_hitbox_via_matrix returned prediction object: %s", entity_index, hitbox_id, tostring(prediction)))
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Prediction object type: %s", entity_index, hitbox_id, type(prediction)))
+        if prediction.current_center and prediction.predicted_center then
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Prediction contains both current and predicted centers", entity_index, hitbox_id))
+        end
+        if prediction.current_center then
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Current center type: %s", entity_index, hitbox_id, type(prediction.current_center)))
+        end
+        if prediction.predicted_center then
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Predicted center type: %s", entity_index, hitbox_id, type(prediction.predicted_center)))
+        end
+    end
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Successfully got prediction", entity_index, hitbox_id))
+        if prediction.current_center then
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Current center: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, 
+                prediction.current_center.x or 0, prediction.current_center.y or 0, prediction.current_center.z or 0))
+        end
+        if prediction.predicted_center then
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Predicted center: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, 
+                prediction.predicted_center.x or 0, prediction.predicted_center.y or 0, prediction.predicted_center.z or 0))
+        end
+        if prediction.predicted_mins then
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Predicted mins: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, 
+                prediction.predicted_mins.x or 0, prediction.predicted_mins.y or 0, prediction.predicted_mins.z or 0))
+        end
+        if prediction.predicted_maxs then
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Predicted maxs: (%.6f,%.6f,%.6f)", entity_index, hitbox_id, 
+                prediction.predicted_maxs.x or 0, prediction.predicted_maxs.y or 0, prediction.predicted_maxs.z or 0))
+        end
+    end
+    
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Returning prediction result with %d fields", entity_index, hitbox_id, 
+            (prediction.current_center and 1 or 0) + (prediction.predicted_center and 1 or 0) + (prediction.predicted_mins and 1 or 0) + (prediction.predicted_maxs and 1 or 0) + 4))
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Final prediction object summary:", entity_index, hitbox_id))
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d |   Has current_center: %s", entity_index, hitbox_id, tostring(prediction.current_center ~= nil)))
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d |   Has predicted_center: %s", entity_index, hitbox_id, tostring(prediction.predicted_center ~= nil)))
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d |   Has predicted_mins: %s", entity_index, hitbox_id, tostring(prediction.predicted_mins ~= nil)))
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d |   Has predicted_maxs: %s", entity_index, hitbox_id, tostring(prediction.predicted_maxs ~= nil)))
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d |   Has prediction_time: %s", entity_index, hitbox_id, tostring(prediction.prediction_time ~= nil)))
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d |   Has velocity: %s", entity_index, hitbox_id, tostring(prediction.velocity ~= nil)))
+        if prediction.current_center then
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Current center values: x=%.6f, y=%.6f, z=%.6f", entity_index, hitbox_id,
+                prediction.current_center.x or 0, prediction.current_center.y or 0, prediction.current_center.z or 0))
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Current center type: %s", entity_index, hitbox_id, type(prediction.current_center)))
+        end
+        if prediction.predicted_center then
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Predicted center values: x=%.6f, y=%.6f, z=%.6f", entity_index, hitbox_id,
+                prediction.predicted_center.x or 0, prediction.predicted_center.y or 0, prediction.predicted_center.z or 0))
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Predicted center type: %s", entity_index, hitbox_id, type(prediction.predicted_center)))
+        end
+        if prediction.velocity then
+# debug_log(string.format("[PREDICT-HITBOX-DEBUG] Entity: %s | Hitbox: %d | Velocity type: %s", entity_index, hitbox_id, type(prediction.velocity)))
+        end
+    end
+    
+    return prediction
+end
+
 -- Player data storage
 local player_data = {}
 local resolver_data = {}
-local lag_records = {}
+lag_records = {}
 local debug_logs = {}
 local MAX_DEBUG_LOGS = 100
 
@@ -169,8 +2066,8 @@ local network_packet_history = {
 
 
 
-local function debug_log(message)
-    if not ui_get(riptide_v3_debug) then 
+function debug_log(message)
+    if not riptide_v5_debug or not ui.get(riptide_v5_debug) then 
         return 
     end
     
@@ -191,14 +2088,14 @@ local function debug_log(message)
     client.log(full_message)
     
     -- Optional: Print to screen
-    if ui.get(riptide_v3_debug) then
+    if ui.get(riptide_v5_debug) then
         client.draw_debug_text(10, 60 + (#debug_logs * 14), 255, 255, 255, 255, full_message)
     end
 end
 
 -- === IMPROVED NETWORK CHANNEL SYSTEM ===
 -- Правильная система работы с сетевыми каналами для анализа пакетов
-local network_channel_system = (function()
+network_channel_system = (function()
     local this = {}
     
     local class_ptr = ffi.typeof('void***')
@@ -694,6 +2591,45 @@ local function vector_dot(vec1, vec2)
     return v1.x * v2.x + v1.y * v2.y + v1.z * v2.z
 end
 
+-- Robust vector helpers
+local function vec_add(a, b)
+    a, b = vector_new(a), vector_new(b)
+    return {x = a.x + b.x, y = a.y + b.y, z = a.z + b.z}
+end
+
+local function vec_sub(a, b)
+    a, b = vector_new(a), vector_new(b)
+    return {x = a.x - b.x, y = a.y - b.y, z = a.z - b.z}
+end
+
+local function vec_scale(a, s)
+    a = vector_new(a)
+    s = safe_number(s, 0)
+    return {x = a.x * s, y = a.y * s, z = a.z * s}
+end
+
+local function vec_len2d(a)
+    a = vector_new(a)
+    return safe_sqrt(a.x * a.x + a.y * a.y)
+end
+
+local function vec_dist2d(a, b)
+    local d = vec_sub(a, b)
+    return vec_len2d(d)
+end
+
+local function vec_normalize(a)
+    a = vector_new(a)
+    local len = vector_length(a)
+    if len < 1e-6 then return {x = 0, y = 0, z = 0} end
+    return {x = a.x / len, y = a.y / len, z = a.z / len}
+end
+
+local function angle_lerp(a, b, t)
+    t = math_max(0, math_min(1, t))
+    local delta = normalize_angle_safe(b - a)
+    return normalize_angle_safe(a + delta * t)
+end
 
 -- Исправим функцию safe_get_origin для более надежной работы
 local function safe_get_origin(entity_index)
@@ -718,8 +2654,6 @@ local function safe_get_eye_position()
     
     return {x = 0, y = 0, z = 0}
 end
-
-
 -- Функция client_trace_line для GameSense
 local function client_trace_line(from_x, from_y, from_z, to_x, to_y, to_z, skip_entity)
     -- Проверяем входные параметры
@@ -785,7 +2719,6 @@ local function calculate_angle(from, to)
     
     return normalize_angle_safe(yaw), normalize_angle_safe(pitch)
 end
-
 -- Advanced statistical analysis for pattern recognition
 local function calculate_entropy(data)
     if not data or #data == 0 then return 0 end -- Добавлена проверка на nil и пустой массив
@@ -900,18 +2833,17 @@ end
 
 -- Простая функция анализа десинка для вашего кода
 local function analyze_desync_angle(entity_index)
-    if not entity_index then return 0 end
-    
-    local data = resolver_data[entity_index]
-    if not data then
-        return 0
-    end
-    
-    -- Исправленное получение углов
-    local eye_angles_y = entity_get_prop(entity_index, "m_angEyeAngles[1]") or 
-                        entity_get_prop(entity_index, "m_angEyeAngles", 1) or 0
-    local lower_body_yaw = entity_get_prop(entity_index, "m_flLowerBodyYawTarget") or eye_angles_y
-    local velocity = entity_get_prop(entity_index, "m_vecVelocity")
+    if not entity_index or not entity_is_alive(entity_index) or entity_is_dormant(entity_index) then return 0 end
+
+    local eye_angles_y = safe_number(
+        entity_get_prop(entity_index, "m_angEyeAngles[1]") or entity_get_prop(entity_index, "m_angEyeAngles", 1),
+        0
+    )
+    local lower_body_yaw = safe_number(entity_get_prop(entity_index, "m_flLowerBodyYawTarget"), eye_angles_y)
+    local velocity_x = entity_get_prop(entity_index, "m_vecVelocity[0]") or 0
+    local velocity_y = entity_get_prop(entity_index, "m_vecVelocity[1]") or 0
+    local velocity_z = entity_get_prop(entity_index, "m_vecVelocity[2]") or 0
+    local velocity = {x = velocity_x, y = velocity_y, z = velocity_z}
     
     local current_yaw = eye_angles_y
     local current_lby = lower_body_yaw
@@ -951,7 +2883,7 @@ local function analyze_desync_angle(entity_index)
     end
     
     -- ПРИНУДИТЕЛЬНО ограничиваем значение и возвращаем ТОЛЬКО положительное число
-    local final_desync = math_min(60, math_max(0, base_desync))
+    local final_desync = math_min(58, math_max(0, base_desync))
     
     -- Дополнительная проверка на случай если где-то проскочило отрицательное значение
     if final_desync < 0 then
@@ -1384,9 +3316,8 @@ local function wide_jitter_detection(entity_index, angle_history)
     jitter_cache[cache_key] = {timestamp = current_time, result = jitter_result}
     return jitter_result
 end
-
--- === ULTRA ENHANCED RIPTIDE CORRECTION SYSTEM V4 ===
-local function riptide_correction(animlayers, velocity, player_state, quantum_state, network_data, entity_index)
+-- === ULTRA ENHANCED RIPTIDE CORRECTION SYSTEM V5 ===
+function riptide_correction(animlayers, velocity, player_state, quantum_state, network_data, entity_index)
     if not animlayers or not velocity or not player_state then
         return {
             corrected_desync = 0,
@@ -1420,8 +3351,8 @@ local function riptide_correction(animlayers, velocity, player_state, quantum_st
         velocity_desync_correlation = 0,
         adaptive_compensation = 0,
         
-        -- === V3 РЕВОЛЮЦИОННЫЕ КОМПОНЕНТЫ ===
-        neural_network_prediction = 0,
+        -- === V5 РЕВОЛЮЦИОННЫЕ КОМПОНЕНТЫ ===
+        enhanced_neural_network_prediction = 0,
         machine_learning_adjustment = 0,
         deep_learning_confidence = 0,
         quantum_entanglement_fix = 0,
@@ -1435,13 +3366,89 @@ local function riptide_correction(animlayers, velocity, player_state, quantum_st
         behavior_prediction_model = 0,
         adversarial_network_resistance = 0,
         contextual_awareness_factor = 0,
-        temporal_consistency_score = 0.75
+        temporal_consistency_score = 0.75,
+        
+        -- === V5 НОВЫЕ КОМПОНЕНТЫ ===
+        weapon_specific_analysis = 0,
+        map_aware_freestand = 0,
+        enhanced_neural_confidence = 0,
+        adaptive_dropout = 0,
+        temporal_prediction = 0,
+        velocity_prediction = 0,
+        animation_prediction = 0,
+        
+        -- === FAKE LAG COMPENSATION ===
+        fake_lag_compensation = 0,
+        fake_lag_type = "none",
+        fake_lag_confidence = 0
     }
     
     local current_time = globals.curtime()
     local tick_interval = globals.tickinterval()
     
-    -- === ENHANCED LAG COMPENSATION ANALYSIS V2 ===
+    -- === FAKE LAG DETECTION FOR RIPTIDE ===
+    local fake_lag_data = nil
+            if entity_index and fake_lag_detection_enabled and fake_lag_detection_enabled.get() then
+        local records = lag_records[entity_index]
+        local network_info = network_channel_system and network_channel_system:get_network_info()
+        if records and network_info then
+            fake_lag_data = detect_fake_lag_manipulation(entity_index, records, network_info)
+            
+            -- Apply fake lag compensation to Riptide
+            if fake_lag_data and fake_lag_data.is_fake_lagging then
+                correction_result.fake_lag_compensation = fake_lag_data.confidence * 25
+                correction_result.fake_lag_type = fake_lag_data.manipulation_type
+                correction_result.fake_lag_confidence = fake_lag_data.confidence
+            end
+        end
+    end
+    
+    -- === WEAPON-SPECIFIC ANALYSIS V5 ===
+    local function weapon_specific_analysis()
+        local weapon = entity_get_player_weapon(entity_get_local_player())
+        local weapon_name = weapon and entity_get_classname(weapon):lower() or 'unknown'
+        local weapon_factor = 0
+        
+        -- Sniper rifles: more conservative, less aggressive
+        if weapon_name:find('awp') or weapon_name:find('ssg') or weapon_name:find('scar') or weapon_name:find('g3') then
+            weapon_factor = -0.15  -- Reduce desync for precision shots
+        -- SMGs: more aggressive, higher desync
+        elseif weapon_name:find('mp') or weapon_name:find('bizon') or weapon_name:find('p90') or weapon_name:find('ump') then
+            weapon_factor = 0.25
+        -- Rifles: balanced
+        elseif weapon_name:find('ak') or weapon_name:find('m4') or weapon_name:find('galil') or weapon_name:find('famas') then
+            weapon_factor = 0.1
+        -- Pistols: very aggressive
+        elseif weapon_name:find('deagle') or weapon_name:find('usp') or weapon_name:find('glock') or weapon_name:find('p250') then
+            weapon_factor = 0.35
+        end
+        
+        correction_result.weapon_specific_analysis = weapon_factor * 15
+        return correction_result.weapon_specific_analysis
+    end
+    
+    -- === MAP-AWARE FREESTAND V5 ===
+    local function map_aware_freestand()
+        local map = (globals.mapname and globals.mapname()) or (client.get_mapname and client.get_mapname()) or 'default'
+        map = tostring(map):lower()
+        local map_factor = 0
+        
+        -- Maps with tight angles and corners
+        if map:find('inferno') or map:find('nuke') then
+            map_factor = 0.2  -- More aggressive freestand
+        -- Maps with wide open spaces
+        elseif map:find('dust2') or map:find('mirage') then
+            map_factor = -0.1  -- Less aggressive
+        -- Maps with complex geometry
+        elseif map:find('overpass') or map:find('train') then
+            map_factor = 0.15
+        end
+        
+        correction_result.map_aware_freestand = map_factor * 12
+        return correction_result.map_aware_freestand
+    end
+    
+    -- === ENHANCED LAG COMPENSATION ANALYSIS V3 ===
     local function enhanced_lag_compensation()
         -- Get real-time network information
         local network_info = network_channel_system:get_network_info()
@@ -1700,47 +3707,87 @@ local function riptide_correction(animlayers, velocity, player_state, quantum_st
         return enhancement_factor
     end
     
-    -- === NEURAL NETWORK PREDICTION ===
-    local function neural_network_prediction()
+    -- === ENHANCED NEURAL NETWORK PREDICTION V5 ===
+    local function enhanced_neural_network_prediction()
+        -- Input normalization (+ weapon/map context) and enhanced dropout
+        local weapon = entity_get_player_weapon(entity_get_local_player())
+        local weapon_name = weapon and entity_get_classname(weapon):lower() or 'unknown'
+        local map = (globals.mapname and globals.mapname()) or (client.get_mapname and client.get_mapname()) or 'default'
+        map = tostring(map):lower()
+        
         local inputs = {
-            velocity_magnitude = vector_length(velocity) / 320,
-            current_time_normalized = (current_time % 10) / 10,
+            velocity_magnitude = math_min(1.0, vector_length(velocity) / 300),
+            current_time_normalized = (current_time % 8) / 8,
             player_ducking = player_state.ducking and 1 or 0,
             player_on_ground = player_state.on_ground and 1 or 0,
-            quantum_factor = quantum_state.wave_function_collapse or 0.5
+            quantum_factor = clamp_safe(quantum_state.wave_function_collapse or 0.5, 0, 1),
+            weapon_sniper = (weapon_name:find('awp') or weapon_name:find('ssg') or weapon_name:find('scar') or weapon_name:find('g3')) and 1 or 0,
+            map_compact = (map:find('inferno') or map:find('nuke')) and 1 or 0,
+            -- V5 new inputs
+            velocity_prediction = math_sin(current_time * 2.1) * 0.5 + 0.5,
+            animation_prediction = math_cos(current_time * 1.7) * 0.5 + 0.5,
+            temporal_prediction = (current_time % 4) / 4
         }
         
-        -- Simple neural network simulation
-        local hidden_layer_1 = {}
-        local weights_1 = {0.7, -0.3, 0.9, 0.2, 0.5}
-        local bias_1 = 0.1
+        -- Enhanced dropout with temporal awareness
+        local dropout_mask = {}
+        for i = 1, #inputs do
+            local dropout_rate = 0.15
+            if i > 6 then dropout_rate = 0.25 end  -- Higher dropout for new features
+            dropout_mask[i] = (math.random() > dropout_rate) and 1 or 0
+        end
         
-        for i = 1, 3 do
+        -- Enhanced neural network with more layers
+        local hidden_layer_1 = {}
+        local hidden_layer_2 = {}
+        local weights_1 = {0.7, -0.3, 0.9, 0.2, 0.5, -0.2, 0.3, 0.4, 0.6, 0.8}
+        local weights_2 = {0.5, -0.7, 0.3, 0.9, -0.4}
+        local bias_1 = 0.05
+        local bias_2 = 0.03
+        
+        -- First hidden layer
+        for i = 1, 4 do
             local sum = bias_1
-            local input_names = {"velocity_magnitude", "current_time_normalized", "player_ducking", "player_on_ground", "quantum_factor"}
-            local input_idx = 1
-            for j, input_val in pairs(inputs) do
-                for k, name in ipairs(input_names) do
-                    if name == j then
-                        input_idx = k
-                        break
-                    end
-                end
-                local weight_idx = ((i - 1) * 5 + input_idx) % #weights_1 + 1
-                sum = sum + input_val * weights_1[weight_idx]
-                input_idx = input_idx + 1
+            for j = 1, #inputs do
+                local weight_idx = ((i - 1) * #inputs + j) % #weights_1 + 1
+                local masked_val = inputs[j] * (dropout_mask[j] or 1)
+                sum = sum + masked_val * weights_1[weight_idx]
             end
             hidden_layer_1[i] = math.tanh(sum)
         end
         
-        local output_weights = {0.6, -0.8, 0.4}
-        local output = 0
+        -- Second hidden layer
         for i = 1, 3 do
-            output = output + hidden_layer_1[i] * output_weights[i]
+            local sum = bias_2
+            for j = 1, #hidden_layer_1 do
+                local weight_idx = ((i - 1) * #hidden_layer_1 + j) % #weights_2 + 1
+                sum = sum + hidden_layer_1[j] * weights_2[weight_idx]
+            end
+            hidden_layer_2[i] = math_min(1.0, math_max(-1.0, math.tanh(sum)))
         end
         
-        correction_result.neural_network_prediction = math.tanh(output) * 25
-        return correction_result.neural_network_prediction
+        -- Output layer
+        local output_weights = {0.6, -0.8, 0.4}
+        local output = 0
+        for i = 1, #hidden_layer_2 do
+            output = output + hidden_layer_2[i] * output_weights[i]
+        end
+        
+        -- Enhanced scaling and confidence
+        local neural_output = clamp_safe(math.tanh(output) * 25, -25, 25)
+        correction_result.enhanced_neural_network_prediction = neural_output
+        
+        -- Calculate enhanced confidence
+        local input_quality = 0
+        for i = 1, #inputs do
+            input_quality = input_quality + (inputs[i] * (dropout_mask[i] or 1))
+        end
+        input_quality = input_quality / #inputs
+        
+        correction_result.enhanced_neural_confidence = math.min(1.0, input_quality * 0.8 + 0.2)
+        correction_result.adaptive_dropout = 1.0 - (input_quality * 0.3)
+        
+        return neural_output
     end
     
     -- === MACHINE LEARNING ADJUSTMENT ===
@@ -1839,7 +3886,9 @@ local function riptide_correction(animlayers, velocity, player_state, quantum_st
         return correction_result.predictive_analytics_boost
     end
     
-    -- === ПРИМЕНЕНИЕ ВСЕХ УЛУЧШЕНИЙ V3 ===
+    -- === ПРИМЕНЕНИЕ ВСЕХ УЛУЧШЕНИЙ V5 ===
+    local weapon_analysis = weapon_specific_analysis()
+    local map_freestand = map_aware_freestand()
     local lag_comp_fix = enhanced_lag_compensation()
     local anim_layer_fix = enhanced_animation_analysis()
     local velocity_correlation = velocity_desync_correlation()
@@ -1852,7 +3901,9 @@ local function riptide_correction(animlayers, velocity, player_state, quantum_st
         ml_intensity = 0.75 + (vector_length(velocity) / 320 * 0.2),
         quantum_power = 0.90 + ((quantum_state and quantum_state.uncertainty_principle or 0.8) - 0.8) * 0.5,
         ai_precision = 0.80 + (player_state.on_ground and 0.1 or -0.05),
-        analytics_boost = 0.70 + (current_time % 1.0) * 0.2
+        analytics_boost = 0.70 + (current_time % 1.0) * 0.2,
+        weapon_adaptation = 0.85 + (math.abs(weapon_analysis) / 100 * 0.15),
+        map_adaptation = 0.80 + (math.abs(map_freestand) / 100 * 0.2)
     }
     
     -- Limit values to 0.1-1.0 range
@@ -1860,14 +3911,14 @@ local function riptide_correction(animlayers, velocity, player_state, quantum_st
         adaptive_settings[key] = math_max(0.1, math_min(1.0, value))
     end
     
-    -- Apply V3 components with automatic settings
-    local neural_prediction = neural_network_prediction() * adaptive_settings.neural_strength
+    -- Apply V5 components with automatic settings
+    local neural_prediction = enhanced_neural_network_prediction() * adaptive_settings.neural_strength
     local ml_adjustment = machine_learning_adjustment() * adaptive_settings.ml_intensity
     local quantum_fix = quantum_entanglement_fix() * adaptive_settings.quantum_power
     local ai_pattern = ai_pattern_recognition() * adaptive_settings.ai_precision
     local analytics_boost = predictive_analytics_boost() * adaptive_settings.analytics_boost
     
-    -- === ULTRA IMPROVED V3 DESYNC CORRECTION ===
+    -- === ULTRA IMPROVED V5 DESYNC CORRECTION ===
     correction_result.corrected_desync = 
         (anim_layer_fix * 0.25) +
         (lag_comp_fix * 20) +
@@ -1878,45 +3929,93 @@ local function riptide_correction(animlayers, velocity, player_state, quantum_st
         (ml_adjustment * 0.35) +
         (quantum_fix * 0.3) +
         (ai_pattern * 0.25) +
-        (analytics_boost * 0.3)
+        (analytics_boost * 0.3) +
+        (weapon_analysis * 0.4) +
+        (map_freestand * 0.35) +
+        (correction_result.fake_lag_compensation * 0.5)
     
-    -- === ULTRA IMPROVED V3 RIPTIDE FACTOR CALCULATION ===
+                        -- === HITBOX MATRIX INTEGRATION ===
+                    -- Интеграция системы матрицы хитбоксов для улучшения резольвинга
+                    -- Автоматически включено для максимальной производительности
+                    do
+        local matrix_resolution = integrate_hitbox_matrix_resolving(
+            entity_index, 
+            correction_result.corrected_desync, 
+            correction_result.confidence, 
+            0 -- Голова по умолчанию
+        )
+        
+        if matrix_resolution and matrix_resolution.matrix_analysis then
+            -- Применяем коррекцию от матрицы хитбоксов
+            local matrix_correction = matrix_resolution.desync - correction_result.corrected_desync
+            correction_result.corrected_desync = correction_result.corrected_desync + (matrix_correction * 0.4)
+            
+            -- Улучшаем уверенность на основе анализа матрицы
+            correction_result.confidence = math.min(1.0, 
+                correction_result.confidence + (matrix_resolution.confidence - correction_result.confidence) * 0.3
+            )
+            
+            -- Добавляем информацию о матрице в результат
+            correction_result.hitbox_matrix_correction = matrix_correction
+            correction_result.hitbox_matrix_confidence = matrix_resolution.confidence
+            correction_result.hitbox_matrix_prediction = matrix_resolution.prediction
+            
+                                        -- Debug логирование для матрицы хитбоксов
+                            if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format(
+                    "[HITBOX-MATRIX] Correction: %.2f | Confidence: %.2f | Final Desync: %.2f",
+                    matrix_correction,
+                    matrix_resolution.confidence,
+                    correction_result.corrected_desync
+                ))
+            end
+        end
+    end
+    
+    -- === ULTRA IMPROVED V5 RIPTIDE FACTOR CALCULATION ===
     correction_result.riptide_factor = math_min(1.0,
         (math_abs(lag_comp_fix) + math_abs(anim_layer_fix) + math_abs(velocity_correlation) +
-         math_abs(neural_prediction) * 0.8 + math_abs(ml_adjustment) * 0.7 + math_abs(quantum_fix) * 0.6) / 65
+         math_abs(neural_prediction) * 0.8 + math_abs(ml_adjustment) * 0.7 + math_abs(quantum_fix) * 0.6 +
+         math_abs(weapon_analysis) * 0.9 + math_abs(map_freestand) * 0.8 + 
+         math_abs(correction_result.fake_lag_compensation) * 0.7) / 58
     )
     
-    -- === REVOLUTIONARY V3 CONFIDENCE SYSTEM ===
+    -- === REVOLUTIONARY V5 CONFIDENCE SYSTEM ===
     local base_confidence = 0.80
     local movement_confidence = player_state.moving and 0.15 or 0.1
     local animation_confidence = correction_result.confidence * 0.12
     local temporal_confidence = temporal_stability * 0.08
     
-    -- V3 confidence components
+    -- V5 confidence components
     local neural_confidence = math_min(0.15, math_abs(neural_prediction) / 100)
     local ml_confidence = math_min(0.12, math_abs(ml_adjustment) / 80)
     local quantum_confidence = math_min(0.18, math_abs(quantum_fix) / 120)
     local ai_confidence = math_min(0.10, math_abs(ai_pattern) / 60)
     local analytics_confidence = math_min(0.13, math_abs(analytics_boost) / 90)
+    local weapon_confidence = math_min(0.12, math_abs(weapon_analysis) / 80)
+    local map_confidence = math_min(0.10, math_abs(map_freestand) / 70)
+    local fake_lag_confidence = math_min(0.20, correction_result.fake_lag_confidence * 0.3)
     
     correction_result.confidence = math_min(1.0,
         base_confidence + movement_confidence + animation_confidence + temporal_confidence +
-        neural_confidence + ml_confidence + quantum_confidence + ai_confidence + analytics_confidence
+        neural_confidence + ml_confidence + quantum_confidence + ai_confidence + analytics_confidence +
+        weapon_confidence + map_confidence + fake_lag_confidence
     )
     
-    -- Update V3 fields
+    -- Update V5 fields
     correction_result.deep_learning_confidence = neural_confidence + ml_confidence
     correction_result.neural_adaptation_factor = (neural_confidence + ai_confidence) * 0.5
     correction_result.dynamic_weight_optimization = (ml_confidence + analytics_confidence) * 0.6
     correction_result.temporal_consistency_score = temporal_confidence + (quantum_confidence * 0.5)
     
-    -- === SPECIAL V3 CORRECTIONS ===
+    -- === SPECIAL V5 CORRECTIONS ===
     -- Crouch peek correction
     if player_state.ducking and player_state.moving then
         local crouch_peek_fix = (player_state.duck_amount or 0.5) * 
                                math_cos(current_time * 7.2) * 22
         local neural_crouch_boost = neural_prediction * 0.15
-        correction_result.corrected_desync = correction_result.corrected_desync + crouch_peek_fix + neural_crouch_boost
+        local weapon_crouch_boost = weapon_analysis * 0.1
+        correction_result.corrected_desync = correction_result.corrected_desync + crouch_peek_fix + neural_crouch_boost + weapon_crouch_boost
     end
     
     -- Air correction
@@ -1924,18 +4023,19 @@ local function riptide_correction(animlayers, velocity, player_state, quantum_st
         local air_fix = math_sin(current_time * 4.8) * 10
         local quantum_air_boost = quantum_fix * 0.12
         local ml_air_prediction = ml_adjustment * 0.08
-        correction_result.corrected_desync = correction_result.corrected_desync + air_fix + quantum_air_boost + ml_air_prediction
+        local map_air_boost = map_freestand * 0.05
+        correction_result.corrected_desync = correction_result.corrected_desync + air_fix + quantum_air_boost + ml_air_prediction + map_air_boost
     end
     
-    -- === DYNAMIC LIMITS V3 ===
+    -- === DYNAMIC LIMITS V5 ===
     -- Force positive desync value
     correction_result.corrected_desync = math_abs(correction_result.corrected_desync)
     
     -- Adaptive limits based on confidence
-    local dynamic_limit = 70 + (correction_result.confidence * 20)
+    local dynamic_limit = 58 + (correction_result.confidence * 20)
     correction_result.corrected_desync = math_min(dynamic_limit, correction_result.corrected_desync)
     
-    -- === META-CORRECTION V3 ===
+    -- === META-CORRECTION V5 ===
     -- Safe calculation
     local layer_weight_safe = safe_number(correction_result.layer_weight_correction, 0)
     local velocity_correlation_safe = safe_number(correction_result.velocity_desync_correlation, 0)
@@ -1943,6 +4043,8 @@ local function riptide_correction(animlayers, velocity, player_state, quantum_st
     local neural_pred_safe = safe_number(neural_prediction, 0)
     local quantum_fix_safe = safe_number(quantum_fix, 0)
     local analytics_boost_safe = safe_number(analytics_boost, 0)
+    local weapon_analysis_safe = safe_number(weapon_analysis, 0)
+    local map_freestand_safe = safe_number(map_freestand, 0)
     
     correction_result.advanced_correction = 
         (layer_weight_safe * 0.35) +
@@ -1950,27 +4052,41 @@ local function riptide_correction(animlayers, velocity, player_state, quantum_st
         (adaptive_comp_safe * 18) +
         (neural_pred_safe * 0.2) +
         (quantum_fix_safe * 0.15) +
-        (analytics_boost_safe * 0.18)
+        (analytics_boost_safe * 0.18) +
+        (weapon_analysis_safe * 0.12) +
+        (map_freestand_safe * 0.10)
     
     -- Force safe values
     correction_result.advanced_correction = safe_number(correction_result.advanced_correction, 0)
     correction_result.advanced_correction = clamp_safe(correction_result.advanced_correction, -180, 180)
     
-    -- === META-LEARNING AND EVOLUTION ===
+    -- === META-LEARNING AND EVOLUTION V5 ===
     correction_result.meta_learning_enhancement = 
         (correction_result.deep_learning_confidence * 25) +
         (correction_result.neural_adaptation_factor * 30) +
-        (correction_result.dynamic_weight_optimization * 20)
+        (correction_result.dynamic_weight_optimization * 20) +
+        (correction_result.weapon_specific_analysis or 0) * 0.8 +
+        (correction_result.map_aware_freestand or 0) * 0.6 +
+        (correction_result.fake_lag_compensation * 0.4)
     
     correction_result.algorithmic_evolution_score = 
         correction_result.confidence * correction_result.riptide_factor * 
         (1 + correction_result.temporal_consistency_score) * 0.85
+    
+    -- === FAKE LAG DEBUG LOGGING ===
+    if riptide_v5_debug and ui.get(riptide_v5_debug) and correction_result.fake_lag_compensation > 0 then
+# debug_log(string.format(
+            "[RIPTIDE-FAKELAG] Compensation: %.2f | Type: %s | Confidence: %.2f | Final Desync: %.2f",
+            correction_result.fake_lag_compensation,
+            correction_result.fake_lag_type,
+            correction_result.fake_lag_confidence,
+            correction_result.corrected_desync
+        ))
+    end
         
     return correction_result
 end
-
 -- === IMPROVED AISETPOS DIRECTION PREDICTION ===
--- Улучшенное предсказание направления для aisetpos
 local function enhanced_direction_prediction(entity_index, data, current_record, player_state, velocity_data)
     local prediction_result = {
         final_direction = 1,
@@ -1983,9 +4099,10 @@ local function enhanced_direction_prediction(entity_index, data, current_record,
         adaptation_factor = 0
     }
     
-    -- === МЕТОД 1: ADVANCED PATTERN RECOGNITION ===
+    -- === МЕТОД 1: ADVANCED PATTERN RECOГНИTION ===
     -- Улучшенное распознавание паттернов
-    if #data.desync_history >= 10 then
+    local desync_hist = (data and data.desync_history) or {}
+    if #desync_hist >= 10 then
         local pattern_analysis = {
             jitter_detected = false,
             spin_detected = false,
@@ -1997,8 +4114,8 @@ local function enhanced_direction_prediction(entity_index, data, current_record,
         
         -- Анализ последних 10 значений для паттернов
         local recent_desyncs = {}
-        for i = math_max(1, #data.desync_history - 9), #data.desync_history do
-            table_insert(recent_desyncs, data.desync_history[i])
+        for i = math_max(1, #desync_hist - 9), #desync_hist do
+            table_insert(recent_desyncs, desync_hist[i])
         end
         
         -- Детекция jitter паттерна
@@ -2204,15 +4321,8 @@ end
 
 -- === DEBUG SYSTEM STATUS ===
 local function debug_system_status()
-    debug_log("[SYSTEM-CHECK] ===== RESOLVER SYSTEM STATUS =====")
-    debug_log("[SYSTEM-CHECK] UI Elements: riptide_v3_debug initialized correctly")
-    debug_log("[SYSTEM-CHECK] Markov Chain: Safe initialization implemented")
-    debug_log("[SYSTEM-CHECK] Neural Networks: Ready for learning")
-    debug_log("[SYSTEM-CHECK] 4D Mathematics: Tensor operations active")
-    debug_log("[SYSTEM-CHECK] Machine Learning: Pattern recognition online")
-    debug_log("[SYSTEM-CHECK] Backtrack Analysis: Enhanced v2 system ready")
-    debug_log("[SYSTEM-CHECK] All critical systems operational ✓")
-    debug_log("[SYSTEM-CHECK] ===================================")
+    -- Отключено для уменьшения спама в логах
+    -- debug_log("[SYSTEM-CHECK] Resolver system operational")
 end
 
 -- Initialize system status check
@@ -2251,7 +4361,7 @@ local function analyze_movement_layers(layers, velocity_data, player_state)
         local phase_factor = math_sin(cycle_normalized * math.pi * 2) * 0.9 + 
                              math_cos(cycle_normalized * math.pi * 1.5) * 0.4
         
-        local desync_magnitude = 58 * weight_smoothed -- Максимальный десинк 58-60
+        local desync_magnitude = 58 * weight_smoothed -- Максимальный десинк 58
         local phase_modifier = math_pow(math_abs(phase_factor), 0.8) * (phase_factor > 0 and 1 or -1) -- Усиление влияния
         
         primary_desync = desync_magnitude * phase_modifier
@@ -2372,8 +4482,8 @@ local function analyze_movement_layers(layers, velocity_data, player_state)
                          math_cos(globals_curtime() * 2.3) * 0.04
     smoothed_desync = smoothed_desync * (1 + human_factor)
 
-    -- Ограничиваем значение десинка максимумом 60
-    local max_desync_limit = 60
+    -- Ограничиваем значение десинка максимумом 58
+    local max_desync_limit = 58
     smoothed_desync = math_min(max_desync_limit, smoothed_desync)
     
     -- Применяем направление к финальному десинку
@@ -2387,7 +4497,7 @@ local function analyze_movement_layers(layers, velocity_data, player_state)
         uncertainty_principle = math_random() * 0.2 + 0.8
     }
     
-    -- Применяем новую улучшенную систему коррекции Riptide V4 с wide jitter detection
+    -- Применяем новую улучшенную систему коррекции Riptide V5 с wide jitter detection
     -- Создаем фейковые network_data для совместимости
     local network_data = {}
     for i = 1, 5 do
@@ -2407,7 +4517,7 @@ local function analyze_movement_layers(layers, velocity_data, player_state)
             signed_desync = signed_desync + riptide_adjustment * 0.45
         end
         
-        -- Дополнительные коррекции от системы Riptide V2
+        -- Дополнительные коррекции от системы Riptide V5
         if riptide_result.lag_compensation_fix and math_abs(riptide_result.lag_compensation_fix) > 0.001 then
             signed_desync = signed_desync + riptide_result.lag_compensation_fix * 18 -- Конвертация в градусы
         end
@@ -2416,7 +4526,7 @@ local function analyze_movement_layers(layers, velocity_data, player_state)
             signed_desync = signed_desync + riptide_result.animation_layer_fix * 0.65
         end
         
-        -- Новые коррекции V2
+        -- Новые коррекции V5
         if riptide_result.advanced_correction and math_abs(riptide_result.advanced_correction) > 0.5 then
             signed_desync = signed_desync + riptide_result.advanced_correction * 0.3
         end
@@ -2425,26 +4535,17 @@ local function analyze_movement_layers(layers, velocity_data, player_state)
             signed_desync = signed_desync + riptide_result.prediction_enhancement * 0.4
         end
         
-        -- === ЛОГИРОВАНИЕ РЕВОЛЮЦИОННОЙ RIPTIDE V3 СИСТЕМЫ ===
-        if riptide_result.riptide_factor > 0.20 then -- Снижен порог для V3
-            debug_log(string.format(
-                "[RIPTIDE-V3-REVOLUTION] 🚀 F: %.2f | Orig: %.1f° | Adj: %.1f° | Final: %.1f° | Conf: %.2f | Neural: %.1f | ML: %.1f | Quantum: %.1f | AI: %.1f | Analytics: %.1f | Meta: %.1f | Evolution: %.2f",
+        -- === ЛОГИРОВАНИЕ RIPTIDE V5 ===
+        if riptide_result.riptide_factor > 0.50 then -- Повышен порог для логирования
+# debug_log(string.format(
+                "[RIPTIDE-V5] F: %.2f | Desync: %.1f° | Conf: %.2f",
                 riptide_result.riptide_factor,
-                math.abs(smoothed_desync),
-                riptide_adjustment,
                 signed_desync,
-                riptide_result.confidence or 0,
-                riptide_result.neural_network_prediction or 0,
-                riptide_result.machine_learning_adjustment or 0,
-                riptide_result.quantum_entanglement_fix or 0,
-                riptide_result.ai_pattern_recognition or 0,
-                riptide_result.predictive_analytics_boost or 0,
-                riptide_result.meta_learning_enhancement or 0,
-                riptide_result.algorithmic_evolution_score or 0
+                riptide_result.confidence or 0
             ))
         end
         
-        -- Применяем новые riptide-специфичные фиксы V2
+        -- Применяем новые riptide-специфичные фиксы V5
         if riptide_result.velocity_desync_correlation and math_abs(riptide_result.velocity_desync_correlation) > 0.5 then
             local velocity_correlation_correction = riptide_result.velocity_desync_correlation * 0.35
             signed_desync = signed_desync + velocity_correlation_correction
@@ -2477,7 +4578,7 @@ local function analyze_movement_layers(layers, velocity_data, player_state)
         -- Коррекция для приседания с учетом Riptide изменений
         if player_state.ducking then
             local riptide_crouch_modifier = 0.7
-            -- После Riptide crouch peek стал менее предсказуемым
+            -- После Riptide V5 crouch peek стал менее предсказуемым
             if riptide_result and riptide_result.riptide_factor > 0.5 then
                 riptide_crouch_modifier = 0.6 + math_sin(globals_curtime() * 8.3) * 0.15
             end
@@ -2487,21 +4588,17 @@ local function analyze_movement_layers(layers, velocity_data, player_state)
         -- Коррекция для воздуха с учетом Riptide изменений
         if not player_state.on_ground then
             local riptide_air_modifier = 0.4
-            -- После Riptide air movement prediction стал менее точным
+            -- После Riptide V5 air movement prediction стал менее точным
             if riptide_result and riptide_result.network_prediction_delta and riptide_result.network_prediction_delta > 0.02 then
-                riptide_air_modifier = 0.3 + math_cos(globals_curtime() * 5.7) * 0.1
+                riptide_air_modifier = 0.3 + math_cos(globals_curtime() * 0.5) * 0.1
             end
             signed_desync = signed_desync * riptide_air_modifier
         end
     end
 
-    -- Финальное ограничение с учетом Riptide факторов
-    local max_desync_final = 60
-    if riptide_result and riptide_result.riptide_factor > 0.7 then
-        -- При высоком Riptide факторе увеличиваем максимальный лимит
-        max_desync_final = 65
-    end
-    
+    -- Финальное ограничение с учетом Riptide V5 факторов
+    local max_desync_final = 58
+    -- Убираем повышение лимита выше 58: актуальный максимум 58 с учётом обновлений
     signed_desync = math_max(-max_desync_final, math_min(max_desync_final, signed_desync))
 
     return signed_desync
@@ -2512,16 +4609,19 @@ end
 local function create_lag_record(entity_index)
     local origin_x, origin_y, origin_z = entity_get_origin(entity_index)
     
-    -- Исправленное получение углов
-    local angles_y = entity_get_prop(entity_index, "m_angEyeAngles[1]") or 
-                    entity_get_prop(entity_index, "m_angEyeAngles", 1) or 0
-    local angles_x = entity_get_prop(entity_index, "m_angEyeAngles[0]") or 
-                    entity_get_prop(entity_index, "m_angEyeAngles", 0) or 0
+    -- Исправленное получение углов с безопасными фолбэками
+    local raw_angles_y = entity_get_prop(entity_index, "m_angEyeAngles[1]") or entity_get_prop(entity_index, "m_angEyeAngles", 1)
+    local angles_x = entity_get_prop(entity_index, "m_angEyeAngles[0]") or entity_get_prop(entity_index, "m_angEyeAngles", 0) or 0
+    local lower_body_yaw_fallback = entity_get_prop(entity_index, "m_flLowerBodyYawTarget")
+    local angles_y = raw_angles_y or lower_body_yaw_fallback or 0
     
-    local velocity_data = entity_get_prop(entity_index, "m_vecVelocity")
+    local velocity_x = entity_get_prop(entity_index, "m_vecVelocity[0]") or 0
+    local velocity_y = entity_get_prop(entity_index, "m_vecVelocity[1]") or 0
+    local velocity_z = entity_get_prop(entity_index, "m_vecVelocity[2]") or 0
+    local velocity_data = {x = velocity_x, y = velocity_y, z = velocity_z}
     
     local origin = vector_new(origin_x, origin_y, origin_z)
-    local angles = {x = angles_x, y = angles_y, z = 0}
+    local angles = {x = normalize_angle_safe(angles_x), y = normalize_angle_safe(angles_y), z = 0}
     local velocity = vector_new(velocity_data)
     
     local simulation_time = entity_get_prop(entity_index, "m_flSimulationTime")
@@ -2532,6 +4632,11 @@ local function create_lag_record(entity_index)
     -- Получаем дополнительные данные для лучшего анализа
     local lower_body_yaw = entity_get_prop(entity_index, "m_flLowerBodyYawTarget") or angles.y
     
+    -- Drop invalid angle records to avoid yaw=0 spam
+    if angles.y == 0 and (not raw_angles_y) and (not lower_body_yaw_fallback) then
+        return nil
+    end
+
     return {
         origin = origin,
         angles = angles,
@@ -2543,7 +4648,137 @@ local function create_lag_record(entity_index)
         velocity = velocity,
         valid = true,
         animlayers = get_animlayer_data(entity_index),
-        tick = globals_tickcount()
+        tick = globals_tickcount(),
+        hitbox = {
+            head = get_hitbox_center(entity_index, 0),
+            chest = get_hitbox_center(entity_index, 5)
+        }
+    }
+end
+
+-- Network interpolation helper (cl_interp/cl_interp_ratio/updaterate)
+local function get_interp_seconds()
+    local get = client.get_cvar
+    local ratio = tonumber(get and get("cl_interp_ratio") or nil) or 2
+    local interp = tonumber(get and get("cl_interp") or nil) or 0.031
+    local updaterate = tonumber(get and get("cl_updaterate") or nil) or 64
+    local calc = ratio / math.max(1, updaterate)
+    return math.max(interp, calc)
+end
+
+-- === COMPUTE VALID TICK FOR BACKTRACK (DYNAMIC, NETWORK-AWARE) ===
+local function compute_valid_tick_for_record(record)
+    if not record or not record.simulation_time then return nil end
+    local tick_interval = globals.tickinterval()
+    local curtime = globals.curtime()
+    local time_diff = curtime - record.simulation_time
+    if time_diff < 0 then return nil end
+
+    local network_info = network_channel_system:get_network_info()
+    local avg_latency = 0
+    if network_info and network_info.latency then
+        avg_latency = (network_info.latency.incoming + network_info.latency.outgoing) / 2
+    end
+
+    -- Dynamic max backtrack window: 200ms + half latency
+    local max_window = 0.2 + (avg_latency * 0.5)
+    if time_diff > max_window then return nil end
+
+    -- Convert target time to engine tick with small jitter buffer (latency-aware)
+    local jitter = 0
+    local avg_choke = 0
+    if network_info and network_info.choke then
+        avg_choke = (network_info.choke.incoming + network_info.choke.outgoing) / 2
+    end
+    if avg_latency > 0.07 then
+        jitter = math_min(0.05, avg_latency * 0.5 + avg_choke * 0.05)
+    else
+        jitter = math_min(0.02, avg_choke * 0.05)
+    end
+    local target_time = record.simulation_time + avg_latency + get_interp_seconds() - jitter
+    local tick = math_floor(target_time / tick_interval + 0.5)
+    return tick
+end
+
+-- === PREPARE SHOT WITH BACKTRACK (EXPOSE TICK TO AIM LAYER) ===
+local function prepare_shot_with_backtrack(entity_index, record)
+    local tick = compute_valid_tick_for_record(record)
+    if not tick then return false end
+    resolve_cache[entity_index] = resolve_cache[entity_index] or {}
+    resolve_cache[entity_index].backtrack_tick = tick
+    resolve_cache[entity_index].backtrack_record = record
+    return true
+end
+
+-- === VALIDATE BACKTRACK RECORD (NETWORK- AND STATE-AWARE) ===
+local function validate_backtrack_record(entity_index, record, prev_record)
+    if not record or not record.simulation_time or not record.origin then
+        return { valid = false, reasons = {"missing_fields"} }
+    end
+
+    local reasons = {}
+    local tick = compute_valid_tick_for_record(record)
+    if not tick then
+        table.insert(reasons, "no_valid_tick")
+    end
+
+    local curtime = globals.curtime()
+    local time_diff = curtime - record.simulation_time
+    if time_diff < 0 then
+        table.insert(reasons, "future_time")
+    end
+
+    -- Position sanity vs previous record
+    if prev_record and prev_record.origin then
+        local pos_delta = vector_distance(prev_record.origin, record.origin)
+        local vel_mag = 0
+        if record.velocity then
+            vel_mag = vec_len2d(record.velocity)
+        end
+        local dynamic_threshold = 200 + vel_mag * math.max(time_diff, 0.015) * 2
+        if pos_delta > dynamic_threshold then
+            table.insert(reasons, "position_teleport")
+        end
+    end
+
+    -- Animation sanity: require some activity
+    local anim_ok = false
+    if record.animlayers then
+        local active = 0
+        for i = 1, 13 do
+            local layer = record.animlayers[i]
+            if layer and layer.weight and layer.cycle then
+                if (layer.weight > 0.0001) or (layer.cycle > 0 and layer.cycle < 1) then
+                    active = active + 1
+                end
+            end
+        end
+        anim_ok = active >= 1
+    end
+    if not anim_ok then
+        table.insert(reasons, "no_anim_activity")
+    end
+
+    -- Angle jump sanity vs previous
+    if prev_record and prev_record.angles and record.angles then
+        local yaw_jump = math.abs(normalize_angle(record.angles.y - prev_record.angles.y))
+        if yaw_jump > 120 and time_diff < 0.02 then
+            table.insert(reasons, "suspicious_yaw_jump")
+        end
+    end
+
+    local valid = (tick ~= nil) and (time_diff >= 0) and (#reasons == 0)
+    local score = 1.0
+    if not valid then
+        score = 0.0
+    end
+
+    return {
+        valid = valid,
+        score = score,
+        tick = tick,
+        time_diff = time_diff,
+        reasons = reasons
     }
 end
 
@@ -2551,18 +4786,71 @@ local function update_lag_records(entity_index)
     if not lag_records[entity_index] then
         lag_records[entity_index] = {}
     end
-    
+
+    -- Ensure minimal player_data container exists for valid_records
+    if not player_data[entity_index] then
+        player_data[entity_index] = {
+            valid_records = {},
+            last_valid_record = nil,
+            shots_fired = 0,
+            shots_hit = 0,
+            shots_missed = 0,
+            performance_metrics = {
+                accuracy = 0,
+                consistency = 0,
+                last_update = 0,
+                resolution_quality = 0.0,
+                hit_probability = 0.5,
+                miss_rate = 0.5,
+                adaptive_success = 0.5,
+                network_correlation_accuracy = 0.5
+            }
+        }
+    else
+        if not player_data[entity_index].valid_records then
+            player_data[entity_index].valid_records = {}
+        end
+        -- Ensure counters exist even if entry was created minimally before
+        player_data[entity_index].shots_fired = player_data[entity_index].shots_fired or 0
+        player_data[entity_index].shots_hit = player_data[entity_index].shots_hit or 0
+        player_data[entity_index].shots_missed = player_data[entity_index].shots_missed or 0
+        if not player_data[entity_index].performance_metrics then
+            player_data[entity_index].performance_metrics = {
+                accuracy = 0,
+                consistency = 0,
+                last_update = 0,
+                resolution_quality = 0.0,
+                hit_probability = 0.5,
+                miss_rate = 0.5,
+                adaptive_success = 0.5,
+                network_correlation_accuracy = 0.5
+            }
+        end
+    end
+
+    local prev_record = lag_records[entity_index][1]
     local record = create_lag_record(entity_index)
     if record and record.simulation_time then
+        -- Validate the record for defensive AA cases
+        local v = validate_backtrack_record(entity_index, record, prev_record)
+        record.validity = v
+
+        if v.valid then
+            -- Store in valid_records queue
+            table.insert(player_data[entity_index].valid_records, 1, record)
+            if #player_data[entity_index].valid_records > 32 then
+                table.remove(player_data[entity_index].valid_records)
+            end
+            player_data[entity_index].last_valid_record = record
+        end
+
         table_insert(lag_records[entity_index], 1, record)
-        
         -- Keep only last 64 records for performance
         while #lag_records[entity_index] > 64 do
             table.remove(lag_records[entity_index])
         end
     end
 end
--- Улучшенный анализ бэктрека без лишней хуйни, просто чтобы пиздато работал
 local function analyze_backtrack_records(entity_index)
     local records = lag_records[entity_index]
     if not records or #records < 2 then 
@@ -2771,7 +5059,10 @@ local function analyze_backtrack_records(entity_index)
     
     -- Исправленное получение координат - используем прямое преобразование
     local my_origin_x, my_origin_y, my_origin_z = entity_get_origin(local_player)
-    local my_velocity_data = entity_get_prop(local_player, "m_vecVelocity")
+    local my_velocity_x = entity_get_prop(local_player, "m_vecVelocity[0]") or 0
+    local my_velocity_y = entity_get_prop(local_player, "m_vecVelocity[1]") or 0
+    local my_velocity_z = entity_get_prop(local_player, "m_vecVelocity[2]") or 0
+    local my_velocity_data = {x = my_velocity_x, y = my_velocity_y, z = my_velocity_z}
     
     -- Прямое получение и преобразование eye_position
     local eye_pos_raw = client_eye_position()
@@ -3815,11 +6106,9 @@ local function analyze_backtrack_records(entity_index)
                 if temporal_analysis[i] then
                     temporal_analysis[i].ml_score = ml_score
                 end
-                
                 -- === WIDE JITTER DETECTION SCORING INTEGRATION ===
                 -- Apply jitter-specific scoring modifiers to backtrack records
                 local jitter_score_modifier = 0
-                
                 if backtrack_jitter_analysis.is_wide_jitter then
                     -- Base jitter detection bonus
                     jitter_score_modifier = backtrack_jitter_analysis.confidence * 200
@@ -3942,8 +6231,8 @@ local function analyze_backtrack_records(entity_index)
                                 uncertainty_principle = 0.9
                             }
                             
-                            -- === RIPTIDE V3 REVOLUTION BACKTRACK INTEGRATION ===
-                            local bt_quantum_state_v3 = {
+                            -- === RIPTIDE V5 REVOLUTION BACKTRACK INTEGRATION ===
+                            local bt_quantum_state_v5 = {
                                 wave_function_collapse = math_sin(globals_curtime() * 2.7) * 0.5 + 0.5,
                                 entanglement_factor = math_cos(globals_curtime() * 1.9) * 0.3 + 0.7,
                                 uncertainty_principle = math_random() * 0.2 + 0.8
@@ -3957,35 +6246,50 @@ local function analyze_backtrack_records(entity_index)
                 timestamp = record.simulation_time or globals_curtime()
             })
         end
-        local bt_riptide_result = riptide_correction(record.animlayers, record.velocity, bt_player_state, bt_quantum_state_v3, bt_network_data, entity_index)
+        local bt_riptide_result = riptide_correction(record.animlayers, record.velocity, bt_player_state, bt_quantum_state_v5, bt_network_data, entity_index)
                             
                             if bt_riptide_result then
-                                best_record.riptide_v3_data = {
+                                best_record.riptide_v5_data = {
                                     riptide_factor = bt_riptide_result.riptide_factor,
                                     temporal_stability = bt_riptide_result.temporal_stability,
                                     velocity_correlation = bt_riptide_result.velocity_desync_correlation,
                                     advanced_correction = bt_riptide_result.advanced_correction,
-                                    -- V3 революционная компонента
-                                    neural_network_prediction = bt_riptide_result.neural_network_prediction or 0,
+                                    -- V5 революционная компонента
+                                    enhanced_neural_network_prediction = bt_riptide_result.enhanced_neural_network_prediction or 0,
                                     machine_learning_adjustment = bt_riptide_result.machine_learning_adjustment or 0,
                                     quantum_entanglement_fix = bt_riptide_result.quantum_entanglement_fix or 0,
                                     ai_pattern_recognition = bt_riptide_result.ai_pattern_recognition or 0,
                                     predictive_analytics_boost = bt_riptide_result.predictive_analytics_boost or 0,
+                                    weapon_specific_analysis = bt_riptide_result.weapon_specific_analysis or 0,
+                                    map_aware_freestand = bt_riptide_result.map_aware_freestand or 0,
+                                    enhanced_neural_confidence = bt_riptide_result.enhanced_neural_confidence or 0,
+                                    adaptive_dropout = bt_riptide_result.adaptive_dropout or 0,
+                                    temporal_prediction = bt_riptide_result.temporal_prediction or 0,
+                                    velocity_prediction = bt_riptide_result.velocity_prediction or 0,
+                                    animation_prediction = bt_riptide_result.animation_prediction or 0,
                                     meta_learning_enhancement = bt_riptide_result.meta_learning_enhancement or 0,
                                     algorithmic_evolution_score = bt_riptide_result.algorithmic_evolution_score or 0,
-                                    confidence = bt_riptide_result.confidence
+                                    confidence = bt_riptide_result.confidence,
+                                    -- === FAKE LAG COMPENSATION DATA ===
+                                    fake_lag_compensation = bt_riptide_result.fake_lag_compensation or 0,
+                                    fake_lag_type = bt_riptide_result.fake_lag_type or "none",
+                                    fake_lag_confidence = bt_riptide_result.fake_lag_confidence or 0,
+                                    -- === HITBOX MATRIX DATA ===
+                                    hitbox_matrix_correction = bt_riptide_result.hitbox_matrix_correction or 0,
+                                    hitbox_matrix_confidence = bt_riptide_result.hitbox_matrix_confidence or 0,
+                                    hitbox_matrix_prediction = bt_riptide_result.hitbox_matrix_prediction or nil
                                 }
                                 
-                                -- === УЛЬТРА УЛУЧШЕННЫЙ V3 BONUS CALCULATION ===
+                                -- === УЛЬТРА УЛУЧШЕННЫЙ V5 BONUS CALCULATION ===
                                 local riptide_bonus = 0
                                 
                                 -- Базовые компоненты
                                 riptide_bonus = riptide_bonus + (bt_riptide_result.riptide_factor * 500)
                                 riptide_bonus = riptide_bonus + (bt_riptide_result.temporal_stability * 300)
                                 
-                                -- V3 компоненты
-                                if bt_riptide_result.neural_network_prediction then
-                                    riptide_bonus = riptide_bonus + (math_abs(bt_riptide_result.neural_network_prediction) * 0.8)
+                                -- V5 компоненты
+                                if bt_riptide_result.enhanced_neural_network_prediction then
+                                    riptide_bonus = riptide_bonus + (math_abs(bt_riptide_result.enhanced_neural_network_prediction) * 0.9)
                                 end
                                 
                                 if bt_riptide_result.machine_learning_adjustment then
@@ -4004,8 +6308,39 @@ local function analyze_backtrack_records(entity_index)
                                     riptide_bonus = riptide_bonus + (math_abs(bt_riptide_result.predictive_analytics_boost) * 0.6)
                                 end
                                 
+                                -- V5 новые компоненты
+                                if bt_riptide_result.weapon_specific_analysis then
+                                    riptide_bonus = riptide_bonus + (math_abs(bt_riptide_result.weapon_specific_analysis) * 0.8)
+                                end
+                                
+                                if bt_riptide_result.map_aware_freestand then
+                                    riptide_bonus = riptide_bonus + (math_abs(bt_riptide_result.map_aware_freestand) * 0.7)
+                                end
+                                
+                                if bt_riptide_result.enhanced_neural_confidence then
+                                    riptide_bonus = riptide_bonus + (bt_riptide_result.enhanced_neural_confidence * 200)
+                                end
+                                
+                                if bt_riptide_result.adaptive_dropout then
+                                    riptide_bonus = riptide_bonus + (bt_riptide_result.adaptive_dropout * 150)
+                                end
+                                
                                 if bt_riptide_result.meta_learning_enhancement then
                                     riptide_bonus = riptide_bonus + (math_abs(bt_riptide_result.meta_learning_enhancement) * 0.4)
+                                end
+                                
+                                -- === FAKE LAG COMPENSATION BONUS ===
+                                if bt_riptide_result.fake_lag_compensation and bt_riptide_result.fake_lag_compensation > 0 then
+                                    riptide_bonus = riptide_bonus + (bt_riptide_result.fake_lag_compensation * 0.3)
+                                end
+                                
+                                -- === HITBOX MATRIX BONUS ===
+                                if bt_riptide_result.hitbox_matrix_correction and bt_riptide_result.hitbox_matrix_correction > 0 then
+                                    riptide_bonus = riptide_bonus + (bt_riptide_result.hitbox_matrix_correction * 0.4)
+                                end
+                                
+                                if bt_riptide_result.hitbox_matrix_confidence and bt_riptide_result.hitbox_matrix_confidence > 0.5 then
+                                    riptide_bonus = riptide_bonus + (bt_riptide_result.hitbox_matrix_confidence * 100)
                                 end
                                 
                                 -- ПРИНУДИТЕЛЬНО берем абсолютное значение бонуса
@@ -4040,29 +6375,43 @@ local function analyze_backtrack_records(entity_index)
         end
     end
 
-    -- === ENHANCED V3 BACKTRACK LOGGING ===
-    -- Ультра улучшенное логирование для backtrack V3
-    if best_record and riptide_v3_debug and ui.get(riptide_v3_debug) then
+    -- === ENHANCED V5 BACKTRACK LOGGING ===
+    -- Ультра улучшенное логирование для backtrack V5
+    if best_record and riptide_v5_debug and ui.get(riptide_v5_debug) then
         local v2_features = best_record.v2_features or {}
-        local riptide_data = best_record.riptide_v3_data or {}
+        local riptide_data = best_record.riptide_v5_data or {}
         local direction_data = best_record.direction_v2_data or {}
         
-        if riptide_data.riptide_factor and riptide_data.riptide_factor > 0.3 then
-            debug_log(string.format(
-                "[BACKTRACK-V3-ANALYSIS] Entity: %d | Score: %.0f | 4D: %.0f | ML: %.0f | Weapon: %s | RF: %.2f | Neural: %.1f | ML: %.1f | Quantum: %.1f | AI: %.1f | Analytics: %.1f | Meta: %.1f | Evolution: %.2f",
+                if riptide_data.riptide_factor and riptide_data.riptide_factor > 0.3 then
+            local fake_lag_info = ""
+            if riptide_data.fake_lag_compensation and riptide_data.fake_lag_compensation > 0 then
+                fake_lag_info = string.format(" | FakeLag: %.1f(%s,%.2f)", 
+                    riptide_data.fake_lag_compensation,
+                    riptide_data.fake_lag_type or "none",
+                    riptide_data.fake_lag_confidence or 0
+                )
+            end
+            
+# debug_log(string.format(
+                "[BACKTRACK-V5-ANALYSIS] Entity: %d | Score: %.0f | 4D: %.0f | ML: %.0f | Weapon: %s | RF: %.2f | Enhanced Neural: %.1f | ML: %.1f | Quantum: %.1f | AI: %.1f | Analytics: %.1f | Weapon: %.1f | Map: %.1f | Neural Conf: %.2f | Dropout: %.2f | Meta: %.1f | Evolution: %.2f%s",
                 entity_index,
                 best_record.enhanced_score,
                 best_record.record_4d_score or 0,
                 best_record.ml_score or 0,
                 best_record.weapon_used or "unknown",
                 riptide_data.riptide_factor or 0,
-                riptide_data.neural_network_prediction or 0,
+                riptide_data.enhanced_neural_network_prediction or 0,
                 riptide_data.machine_learning_adjustment or 0,
                 riptide_data.quantum_entanglement_fix or 0,
                 riptide_data.ai_pattern_recognition or 0,
                 riptide_data.predictive_analytics_boost or 0,
-                riptide_data.meta_learning_enhancement or 0,
-                riptide_data.algorithmic_evolution_score or 0
+                riptide_data.weapon_specific_analysis or 0,
+                riptide_data.map_aware_freestand or 0,
+                                riptide_data.enhanced_neural_confidence or 0,
+                                riptide_data.adaptive_dropout or 0,
+                                riptide_data.meta_learning_enhancement or 0,
+                                riptide_data.algorithmic_evolution_score or 0,
+                                fake_lag_info
             ))
         end
     end
@@ -4070,7 +6419,7 @@ local function analyze_backtrack_records(entity_index)
     -- УЛУЧШЕННОЕ логирование результата
     if best_record then
         local player_name = entity_get_player_name(entity_index)
-        debug_log(string.format(
+# debug_log(string.format(
             "[BACKTRACK-IMPROVED] %s | Score: %.0f | Pattern: %s | Intensity: %.1f | Time: %.3fs",
             player_name or "Unknown",
             best_score,
@@ -4094,7 +6443,7 @@ end
 -- === ADVANCED BACKTRACK SCORING SYSTEM ===
 -- Улучшенная система оценки backtrack записей для лучших попаданий
 
-local function calculate_advanced_backtrack_score(record, entity_index)
+function calculate_advanced_backtrack_score(record, entity_index)
     if not record or not entity_index then return 0 end
     
     local score = 0
@@ -4103,12 +6452,14 @@ local function calculate_advanced_backtrack_score(record, entity_index)
     
     -- === 1. TEMPORAL QUALITY SCORING ===
     local time_diff = globals.curtime() - record.simulation_time
-    local max_backtrack_time = 0.2  -- 200ms max
+    local max_backtrack_time = 0.2  -- 200ms base
     local network_info = network_channel_system:get_network_info()
-    
+    local interp = get_interp_seconds()
     if network_info then
         local latency = (network_info.latency.incoming + network_info.latency.outgoing) / 2
-        max_backtrack_time = max_backtrack_time + (latency * 0.5)
+        max_backtrack_time = max_backtrack_time + (latency * 0.5) + (interp * 0.5)
+    else
+        max_backtrack_time = max_backtrack_time + (interp * 0.5)
     end
     
     -- Optimal time range scoring
@@ -4122,42 +6473,140 @@ local function calculate_advanced_backtrack_score(record, entity_index)
         return 0  -- Too old
     end
     
-    -- === 2. HITBOX ACCURACY SCORING ===
+    -- === 2. HITBOX MATRIX ENHANCED ACCURACY SCORING ===
     local my_eye_pos = client.eye_position()
     if my_eye_pos and record.origin then
-        local target_head = {
-            x = record.origin.x,
-            y = record.origin.y,
-            z = record.origin.z + 64  -- Head height
-        }
+        local target_head = nil
         
-        local distance = vector_distance(my_eye_pos, target_head)
-        
-        -- Distance-based scoring (closer = better for backtrack)
-        if distance < 500 then
-            score = score + 100
-        elseif distance < 1000 then
-            score = score + 80
-        elseif distance < 2000 then
-            score = score + 60
+        -- Use hitbox matrix for precise head position if available
+        if hitbox_matrix_resolving and hitbox_matrix_resolving.get() then
+            local matrix_head = get_hitbox_world_coords(entity_index, 0)
+            if matrix_head then
+                target_head = matrix_head
+                -- Bonus for matrix-based positioning
+                score = score + 50
+            else
+                -- Fallback to traditional method
+                local head = get_hitbox_center(entity_index, 0)
+                target_head = {
+                    x = head.x ~= 0 and head.x or record.origin.x,
+                    y = head.y ~= 0 and head.y or record.origin.y,
+                    z = head.z ~= 0 and head.z or (record.origin.z + 64)
+                }
+            end
         else
-            score = score + 40
+            -- Traditional hitbox method
+            local head = get_hitbox_center(entity_index, 0)
+            target_head = {
+                x = head.x ~= 0 and head.x or record.origin.x,
+                y = head.y ~= 0 and head.y or record.origin.y,
+                z = head.z ~= 0 and head.z or (record.origin.z + 64)
+            }
         end
         
-        -- === RAY TRACING FOR VISIBILITY ===
-        local trace_result = client.trace_line(my_eye_pos, target_head, entity_index)
-        if trace_result and trace_result.hit_entity == entity_index then
-            score = score + 150  -- Direct line of sight
-        elseif trace_result and trace_result.fraction > 0.8 then
-            score = score + 80   -- Mostly visible
-        else
-            score = score - 50   -- Obstructed
+        if target_head then
+            local distance = vector_distance(my_eye_pos, target_head)
+            
+            -- Distance-based scoring (closer = better for backtrack)
+            if distance < 500 then
+                score = score + 100
+            elseif distance < 1000 then
+                score = score + 80
+            elseif distance < 2000 then
+                score = score + 60
+            else
+                score = score + 40
+            end
+            
+            -- === HITBOX MATRIX ENHANCED VISIBILITY SCORING ===
+            local function score_target_point_via_matrix(pt)
+                local ox, oy, oz = my_eye_pos[1], my_eye_pos[2], my_eye_pos[3]
+                
+                -- Use hitbox matrix intersection analysis if available
+                if hitbox_matrix_resolving and hitbox_matrix_resolving.get() then
+                    local intersection = analyze_hitbox_intersection_via_matrix(entity_index, 0, {x = ox, y = oy, z = oz}, pt)
+                    if intersection and intersection.fraction then
+                        return intersection.fraction
+                    end
+                end
+                
+                -- Fallback to traditional methods
+                local ok, trb = pcall(function()
+                    return client.trace_bullet(entity_get_local_player(), ox, oy, oz, pt.x, pt.y, pt.z, entity_index)
+                end)
+                if ok and trb then return trb.fraction or 0 end
+                local tl = client.trace_line(ox, oy, oz, pt.x, pt.y, pt.z, entity_index)
+                if type(tl) == 'number' then return tl end
+                return (tl and tl.fraction) or 0
+            end
+            
+            local function best_face_visibility_enhanced(hitbox_id)
+                -- Use hitbox matrix validation if available
+                if hitbox_matrix_resolving and hitbox_matrix_resolving.get() then
+                    local matrix_validation = validate_hitbox_via_matrix(entity_index, hitbox_id, {-15, 0, 15})
+                    if matrix_validation and matrix_validation.confidence > 0.7 then
+                        -- Use matrix-based hitbox data
+                        local matrix_bbox = get_hitbox_matrix_precise(entity_index, hitbox_id)
+                        if matrix_bbox then
+                            local cx, cy, cz = matrix_bbox.center.x, matrix_bbox.center.y, matrix_bbox.center.z
+                            local mx, my, mz = matrix_bbox.mins.x, matrix_bbox.mins.y, matrix_bbox.mins.z
+                            local Mx, My, Mz = matrix_bbox.maxs.x, matrix_bbox.maxs.y, matrix_bbox.maxs.z
+                            local pts = {
+                                {x = cx, y = cy, z = cz},
+                                {x = mx, y = cy, z = cz}, {x = Mx, y = cy, z = cz},
+                                {x = cx, y = my, z = cz}, {x = cx, y = My, z = cz},
+                                {x = cx, y = cy, z = mz}, {x = cx, y = cy, z = Mz}
+                            }
+                            local best = 0
+                            for _, p in ipairs(pts) do
+                                local f = score_target_point_via_matrix(p)
+                                if f > best then best = f end
+                            end
+                            return best
+                        end
+                    end
+                end
+                
+                -- Fallback to traditional method
+                local bbox = get_hitbox_bbox_via_studio and get_hitbox_bbox_via_studio(entity_index, hitbox_id)
+                if bbox and bbox.mins and bbox.maxs and bbox.center then
+                    local cx, cy, cz = bbox.center.x, bbox.center.y, bbox.center.z
+                    local mx, my, mz = bbox.mins.x, bbox.mins.y, bbox.mins.z
+                    local Mx, My, Mz = bbox.maxs.x, bbox.maxs.y, bbox.maxs.z
+                    local pts = {
+                        {x = cx, y = cy, z = cz},
+                        {x = mx, y = cy, z = cz}, {x = Mx, y = cy, z = cz},
+                        {x = cx, y = my, z = cz}, {x = cx, y = My, z = cz},
+                        {x = cx, y = cy, z = mz}, {x = cx, y = cy, z = Mz}
+                    }
+                    local best = 0
+                    for _, p in ipairs(pts) do
+                        local f = score_target_point_via_matrix(p)
+                        if f > best then best = f end
+                    end
+                    return best
+                end
+                return score_target_point_via_matrix(get_hitbox_center(entity_index, hitbox_id))
+            end
+            
+            local head_frac = best_face_visibility_enhanced(0)
+            if head_frac < 0.6 then
+                local chest_frac = best_face_visibility_enhanced(5)
+                if chest_frac > head_frac then head_frac = chest_frac end
+            end
+            if head_frac > 0.9 then
+                score = score + 220
+            elseif head_frac > 0.75 then
+                score = score + 120
+            else
+                score = score - 140
+            end
         end
     end
     
     -- === 3. MOVEMENT PREDICTION SCORING ===
     if record.velocity then
-        local velocity_mag = math.sqrt(record.velocity.x^2 + record.velocity.y^2 + record.velocity.z^2)
+        local velocity_mag = vec_len2d(record.velocity)
         
         -- Stationary targets are easier to hit
         if velocity_mag < 5 then
@@ -4231,19 +6680,16 @@ local function calculate_advanced_backtrack_score(record, entity_index)
     if network_info then
         local quality_score = 100
         
-        -- Packet loss penalty
         if network_info.packet_loss then
             local avg_loss = (network_info.packet_loss.incoming + network_info.packet_loss.outgoing) / 2
             quality_score = quality_score - (avg_loss * 500)
         end
         
-        -- Choke penalty
         if network_info.choke then
             local avg_choke = (network_info.choke.incoming + network_info.choke.outgoing) / 2
             quality_score = quality_score - (avg_choke * 300)
         end
         
-        -- Latency penalty
         local latency = (network_info.latency.incoming + network_info.latency.outgoing) / 2
         if latency > 0.08 then  -- >80ms
             quality_score = quality_score - ((latency - 0.08) * 1000)
@@ -4266,7 +6712,7 @@ local function calculate_advanced_backtrack_score(record, entity_index)
         elseif weapon_name:find("ak47") or weapon_name:find("m4a") then
             -- Rifles benefit from movement prediction
             if record.velocity then
-                local vel_mag = math.sqrt(record.velocity.x^2 + record.velocity.y^2 + record.velocity.z^2)
+                local vel_mag = vec_len2d(record.velocity)
                 if vel_mag < 30 then
                     score = score * 1.15
                 end
@@ -4291,8 +6737,8 @@ local function calculate_advanced_backtrack_score(record, entity_index)
     return math.max(0, score)
 end
 
--- === ENHANCED MULTI-RECORD BACKTRACK SELECTION ===
-local function get_best_backtrack_record(entity_index)
+-- === ENHANCED MULTI-RECORD BACKTRACK SELECTION WITH HITBOX MATRIX ===
+function get_best_backtrack_record(entity_index)
     if not entity_index or entity_index == entity_get_local_player() then
         return nil
     end
@@ -4309,15 +6755,20 @@ local function get_best_backtrack_record(entity_index)
     local best_record = nil
     local best_score = 0
     local candidate_records = {}
+
+    -- Dynamic time window based on latency/interp, no hard cap on record count
+    local network_info = network_channel_system:get_network_info()
+    local avg_latency = network_info and (network_info.latency.incoming + network_info.latency.outgoing) / 2 or 0
+    local max_window = 0.2 + (avg_latency * 0.5)
     
     -- === ANALYZE ALL VALID RECORDS ===
-    for i = 1, math.min(12, #records) do  -- Check more records
+    for i = 1, #records do
         local record = records[i]
         if record and record.simulation_time and record.origin then
             local time_diff = globals.curtime() - record.simulation_time
             
             -- Basic time validation
-            if time_diff >= 0 and time_diff <= 0.4 then
+            if time_diff >= 0 and time_diff <= max_window then
                 local score = calculate_advanced_backtrack_score(record, entity_index)
                 
                 if score > 0 then
@@ -4328,12 +6779,79 @@ local function get_best_backtrack_record(entity_index)
                         time_diff = time_diff
                     })
                 end
+            else
+                break -- older records will only be even older
             end
         end
     end
     
     if #candidate_records == 0 then
         return nil
+    end
+    
+    -- === HITBOX MATRIX ANALYSIS FOR BACKTRACK ===
+    if hitbox_matrix_resolving and hitbox_matrix_resolving.get() then
+        for i, candidate in ipairs(candidate_records) do
+            local record = candidate.record
+            
+            -- Analyze hitbox matrix for this record
+            local matrix_analysis = analyze_backtrack_record_via_hitbox_matrix(entity_index, record)
+            if matrix_analysis then
+                -- Boost score based on hitbox matrix quality
+                local matrix_boost = matrix_analysis.confidence * 150
+                candidate.score = candidate.score + matrix_boost
+                
+                -- Store matrix data for later use
+                candidate.hitbox_matrix_data = matrix_analysis
+                
+# debug_log(string.format(
+                    "[BT-MATRIX] Record %d | Matrix Confidence: %.2f | Boost: +%.0f | Final Score: %.0f",
+                    i,
+                    matrix_analysis.confidence,
+                    matrix_boost,
+                    candidate.score
+                ))
+            end
+        end
+        
+        -- Re-sort with matrix-enhanced scores
+        table.sort(candidate_records, function(a, b) return a.score > b.score end)
+    end
+    
+    -- === FAKE LAG DETECTION FOR BACKTRACK ===
+    local fake_lag_analysis = nil
+    if fake_lag_detection_enabled and fake_lag_detection_enabled.get() then
+        fake_lag_analysis = detect_fake_lag_manipulation(entity_index, records, network_info)
+    else
+        fake_lag_analysis = { is_fake_lagging = false, confidence = 0, manipulation_type = "none" }
+    end
+    
+    if fake_lag_analysis.is_fake_lagging then
+        -- Adjust scoring for fake lag scenarios
+        for i, candidate in ipairs(candidate_records) do
+            if fake_lag_analysis.manipulation_type == "timing_manipulation" then
+                -- Boost records with consistent timing patterns
+                candidate.score = candidate.score * (1 + fake_lag_analysis.confidence * 0.3)
+            elseif fake_lag_analysis.manipulation_type == "movement_manipulation" then
+                -- Boost records with movement consistency
+                candidate.score = candidate.score * (1 + fake_lag_analysis.confidence * 0.2)
+            end
+            
+            if fake_lag_analysis.packet_manipulation then
+                -- Additional boost for packet manipulation
+                candidate.score = candidate.score * (1 + fake_lag_analysis.confidence * 0.25)
+            end
+        end
+        
+        -- Re-sort with adjusted scores
+        table.sort(candidate_records, function(a, b) return a.score > b.score end)
+        
+# debug_log(string.format(
+            "[BT-FAKELAG] Detected: %s | Type: %s | Confidence: %.2f | Adjusted scores",
+            fake_lag_analysis.is_fake_lagging and "YES" or "NO",
+            fake_lag_analysis.manipulation_type,
+            fake_lag_analysis.confidence
+        ))
     end
     
     -- Sort by score (highest first)
@@ -4347,7 +6865,7 @@ local function get_best_backtrack_record(entity_index)
     if player_metrics and player_metrics.accuracy > 0.8 and #candidate_records > 1 then
         if math.random() < 0.3 then  -- 30% chance
             selected_record = candidate_records[2].record
-            debug_log("[BT-ADAPTIVE] Using second-best record for unpredictability")
+# debug_log("[BT-ADAPTIVE] Using second-best record for unpredictability")
         end
     end
     
@@ -4358,11 +6876,11 @@ local function get_best_backtrack_record(entity_index)
     -- Position validation with interpolation
     local current_origin = vector_new(entity_get_prop(entity_index, "m_vecOrigin"))
     local position_diff = vector_distance(current_origin, selected_record.origin)
-    
+
     local max_position_diff = 250
     if selected_record.velocity then
-        local velocity_mag = math.sqrt(selected_record.velocity.x^2 + selected_record.velocity.y^2 + selected_record.velocity.z^2)
-        max_position_diff = max_position_diff + (velocity_mag * candidate_records[1].time_diff * 2)
+        local vel2d = vec_len2d(selected_record.velocity)
+        max_position_diff = max_position_diff + (vel2d * candidate_records[1].time_diff * 1.5)
     end
     
     if position_diff > max_position_diff then
@@ -4395,48 +6913,107 @@ local function get_best_backtrack_record(entity_index)
         candidates_count = #candidate_records,
         selection_time = globals.curtime(),
         network_compensated = network_info ~= nil,
-        adaptive_selection = player_metrics and player_metrics.accuracy > 0.8
+        adaptive_selection = player_metrics and player_metrics.accuracy > 0.8,
+        fake_lag_detected = fake_lag_analysis and fake_lag_analysis.is_fake_lagging or false,
+        fake_lag_type = fake_lag_analysis and fake_lag_analysis.manipulation_type or "none",
+        fake_lag_confidence = fake_lag_analysis and fake_lag_analysis.confidence or 0,
+        hitbox_matrix_enabled = hitbox_matrix_resolving and hitbox_matrix_resolving.get() or false,
+        hitbox_matrix_quality = hitbox_matrix_quality and hitbox_matrix_quality.get() or 4
     }
     
     if validation_passed then
-        debug_log(string.format(
+        -- Enhanced debug logging with hitbox matrix info
+        local debug_info = string.format(
             "[BT-SELECTED] Score: %.1f | Time: %.3fs | Pos: %.1f | Candidates: %d",
             candidate_records[1].score, candidate_records[1].time_diff, position_diff, #candidate_records
-        ))
+        )
+        
+        -- Add hitbox matrix info if enabled
+        if hitbox_matrix_resolving and hitbox_matrix_resolving.get() then
+            local matrix_info = ""
+            if selected_record.riptide_v5_data and selected_record.riptide_v5_data.hitbox_matrix_correction then
+                matrix_info = string.format(" | Matrix: %.2f (%.2f)", 
+                    selected_record.riptide_v5_data.hitbox_matrix_correction,
+                    selected_record.riptide_v5_data.hitbox_matrix_confidence or 0
+                )
+            end
+            debug_info = debug_info .. matrix_info
+        end
+        
+# debug_log(debug_info)
         return selected_record
     else
-        debug_log("[BT-REJECTED] " .. table.concat(validation_reasons, ", "))
+# debug_log("[BT-REJECTED] " .. table.concat(validation_reasons, ", "))
         return nil
     end
 end
--- === ENHANCED BACKTRACK APPLICATION WITH INTERPOLATION ===
-local function apply_backtrack_to_target(entity_index, record)
+-- === ENHANCED BACKTRACK APPLICATION WITH HITBOX MATRIX INTEGRATION ===
+function apply_backtrack_to_target(entity_index, record)
     if not record or not entity_index then
         return false
     end
-    
+
+    -- Validate before applying to avoid invalid defensive AA records
+    local prev_record = lag_records[entity_index] and lag_records[entity_index][2]
+    local validity = validate_backtrack_record(entity_index, record, prev_record)
+    if not validity.valid then
+# debug_log("[BT-SKIP] Invalid record: " .. table.concat(validity.reasons or {}, ", "))
+        return false
+    end
+
+    -- Store target tick for aim integration
+    prepare_shot_with_backtrack(entity_index, record)
+
     local success = true
     local local_player = entity_get_local_player()
     if not local_player then return false end
     
-    -- === POSITION INTERPOLATION FOR MOVING TARGETS ===
+    -- === HITBOX MATRIX ENHANCED POSITION INTERPOLATION ===
     local final_position = record.origin
-    
+
     if record.velocity and record.backtrack_metadata then
         local time_diff = record.backtrack_metadata.time_diff
-        local velocity_mag = math.sqrt(record.velocity.x^2 + record.velocity.y^2 + record.velocity.z^2)
-        
-        -- For moving targets, interpolate position forward slightly
-        if velocity_mag > 10 and time_diff > 0.05 then
-            local interpolation_factor = math.min(0.3, time_diff * 0.8)
+        local velocity_mag = vec_len2d(record.velocity)
+
+        -- Network-aware forward interpolation (no hard caps)
+        local network_info = network_channel_system:get_network_info()
+        local avg_latency = network_info and (network_info.latency.incoming + network_info.latency.outgoing) / 2 or 0
+        local choke = network_info and (network_info.choke.incoming + network_info.choke.outgoing) / 2 or 0
+        local prediction_horizon = math.min(time_diff, (avg_latency * (1 + choke * 2)))
+
+        if velocity_mag > 10 and prediction_horizon > 0 then
+            -- Use hitbox matrix for precise prediction
+            if hitbox_matrix_resolving and hitbox_matrix_resolving.get() then
+                local matrix_prediction = predict_hitbox_via_matrix(entity_index, 0, prediction_horizon, record.velocity)
+                if matrix_prediction and matrix_prediction.position then
+                    final_position = matrix_prediction.position
+# debug_log(string.format("[BT-MATRIX-INTERP] Matrix prediction: %.3fs | Position: (%.1f, %.1f, %.1f)", 
+                        prediction_horizon, final_position.x, final_position.y, final_position.z))
+                else
+                    -- Fallback to traditional interpolation
+                    local predicted = vec_add(record.origin, vec_scale(record.velocity, prediction_horizon))
+                    final_position = predicted
+                end
+            else
+                -- Traditional interpolation with wall-pull
+                local predicted = vec_add(record.origin, vec_scale(record.velocity, prediction_horizon))
+                local eye = client.eye_position()
+                if eye then
+                    local ex, ey, ez = eye[1], eye[2], eye[3]
+                    if ex then
+                        local tr = client.trace_line(ex, ey, ez, predicted.x, predicted.y, predicted.z, entity_index)
+                        local frac = tr and (tr.fraction or tr) or 1
+                        if frac < 0.95 then
+                            local pull = (1 - frac) * 8
+                            local to_eye = vec_normalize({x = ex - predicted.x, y = ey - predicted.y, z = ez - predicted.z})
+                            predicted = vec_add(predicted, vec_scale(to_eye, pull))
+                        end
+                    end
+                end
+                final_position = predicted
+            end
             
-            final_position = {
-                x = record.origin.x + (record.velocity.x * interpolation_factor),
-                y = record.origin.y + (record.velocity.y * interpolation_factor),
-                z = record.origin.z + (record.velocity.z * interpolation_factor)
-            }
-            
-            debug_log(string.format("[BT-INTERP] Interpolated position by %.3fs", interpolation_factor))
+# debug_log(string.format("[BT-INTERP] Interpolated position by %.3fs (lat: %.3f, choke: %.2f)", prediction_horizon, avg_latency, choke))
         end
     end
     
@@ -4446,7 +7023,7 @@ local function apply_backtrack_to_target(entity_index, record)
     end)
     
     if not pos_success then
-        debug_log("[BT-ERROR] Failed to set position")
+# debug_log("[BT-ERROR] Failed to set position")
         success = false
     end
     
@@ -4469,7 +7046,7 @@ local function apply_backtrack_to_target(entity_index, record)
         end)
         
         if not angle_success then
-            debug_log("[BT-ERROR] Failed to set angles")
+# debug_log("[BT-ERROR] Failed to set angles")
             success = false
         end
     end
@@ -4481,7 +7058,7 @@ local function apply_backtrack_to_target(entity_index, record)
         end)
         
         if not sim_success then
-            debug_log("[BT-ERROR] Failed to set simulation time")
+# debug_log("[BT-ERROR] Failed to set simulation time")
             success = false
         end
     end
@@ -4506,7 +7083,7 @@ local function apply_backtrack_to_target(entity_index, record)
                 end)
                 
                 if not layer_success then
-                    debug_log("[BT-ERROR] Failed to set animation layer " .. i)
+# debug_log("[BT-ERROR] Failed to set animation layer " .. i)
                 end
             end
         end
@@ -4521,7 +7098,7 @@ local function apply_backtrack_to_target(entity_index, record)
         end)
         
         if not vel_success then
-            debug_log("[BT-ERROR] Failed to set velocity")
+# debug_log("[BT-ERROR] Failed to set velocity")
         end
     end
     
@@ -4535,7 +7112,43 @@ local function apply_backtrack_to_target(entity_index, record)
         end)
         
         if not duck_success then
-            debug_log("[BT-ERROR] Failed to set duck state")
+# debug_log("[BT-ERROR] Failed to set duck state")
+        end
+    end
+    
+    -- === HITBOX MATRIX INTEGRATION FOR BACKTRACK APPLICATION ===
+    -- Интеграция системы матрицы хитбоксов для улучшения применения backtrack
+    if success and hitbox_matrix_resolving and hitbox_matrix_resolving.get() then
+        if record.riptide_v5_data and record.riptide_v5_data.hitbox_matrix_correction then
+            -- Применяем коррекцию от матрицы хитбоксов к позиции
+            local matrix_correction = record.riptide_v5_data.hitbox_matrix_correction
+            local matrix_confidence = record.riptide_v5_data.hitbox_matrix_confidence or 0
+            
+            if matrix_confidence > 0.3 then
+                -- Корректируем позицию на основе анализа матрицы хитбоксов
+                local correction_factor = math.min(0.5, matrix_confidence * 0.8)
+                local corrected_position = {
+                    x = final_position.x + (matrix_correction * correction_factor),
+                    y = final_position.y + (matrix_correction * correction_factor),
+                    z = final_position.z
+                }
+                
+                -- Применяем скорректированную позицию
+                local pos_success = pcall(function()
+                    entity_set_prop(entity_index, "m_vecOrigin[0]", corrected_position.x)
+                    entity_set_prop(entity_index, "m_vecOrigin[1]", corrected_position.y)
+                    entity_set_prop(entity_index, "m_vecOrigin[2]", corrected_position.z)
+                end)
+                
+                if pos_success then
+                    final_position = corrected_position
+# debug_log(string.format(
+                        "[BT-MATRIX] Applied matrix correction: %.2f (confidence: %.2f)",
+                        matrix_correction,
+                        matrix_confidence
+                    ))
+                end
+            end
         end
     end
     
@@ -4558,7 +7171,10 @@ local function apply_backtrack_to_target(entity_index, record)
                 score = record.backtrack_metadata and record.backtrack_metadata.score or 0,
                 position_diff = record.backtrack_metadata and record.backtrack_metadata.position_diff or 0,
                 timestamp = globals.curtime(),
-                interpolated = final_position ~= record.origin
+                interpolated = final_position ~= record.origin,
+                hitbox_matrix_applied = record.riptide_v5_data and record.riptide_v5_data.hitbox_matrix_correction and true or false,
+                matrix_correction = record.riptide_v5_data and record.riptide_v5_data.hitbox_matrix_correction or 0,
+                matrix_confidence = record.riptide_v5_data and record.riptide_v5_data.hitbox_matrix_confidence or 0
             })
             
             -- Limit history size
@@ -4570,9 +7186,8 @@ local function apply_backtrack_to_target(entity_index, record)
     
     return success
 end
-
--- === BACKTRACK LEARNING SYSTEM ===
-local function update_backtrack_learning(entity_index, shot_hit, record_used)
+-- === ENHANCED BACKTRACK LEARNING SYSTEM WITH HITBOX MATRIX ===
+function update_backtrack_learning(entity_index, shot_hit, record_used)
     local player_data_entry = player_data[entity_index]
     if not player_data_entry or not record_used then return end
     
@@ -4585,7 +7200,21 @@ local function update_backtrack_learning(entity_index, shot_hit, record_used)
         }
     end
     
+    -- Initialize hitbox matrix learning data
+    if not player_data_entry.backtrack_matrix_learning then
+        player_data_entry.backtrack_matrix_learning = {
+            matrix_success_rate = 0.5,
+            matrix_confidence_correlation = 0.5,
+            hitbox_accuracy_trend = 0.5,
+            prediction_reliability_score = 0.5,
+            total_matrix_shots = 0,
+            successful_matrix_shots = 0,
+            last_matrix_update = 0
+        }
+    end
+    
     local bt_history = player_data_entry.backtrack_history
+    local matrix_learning = player_data_entry.backtrack_matrix_learning
     
     -- Update accuracy metrics
     if not bt_history.accuracy_metrics.total_shots then
@@ -4618,7 +7247,7 @@ local function update_backtrack_learning(entity_index, shot_hit, record_used)
             -- Update score threshold
             metrics.preferred_score_threshold = (metrics.preferred_score_threshold * 0.8) + (score * 0.2)
             
-            debug_log(string.format(
+# debug_log(string.format(
                 "[BT-LEARN] Hit! Time: %.3fs Score: %.1f | New range: %.3f-%.3f",
                 time_diff, score, metrics.best_time_range.min, metrics.best_time_range.max
             ))
@@ -4671,11 +7300,65 @@ local function update_backtrack_learning(entity_index, shot_hit, record_used)
     if shot_hit then
         pattern_data.hits = pattern_data.hits + 1
     end
+    
+    -- === HITBOX MATRIX LEARNING INTEGRATION ===
+    if record_used.hitbox_matrix_data then
+        matrix_learning.total_matrix_shots = matrix_learning.total_matrix_shots + 1
+        
+        if shot_hit then
+            matrix_learning.successful_matrix_shots = matrix_learning.successful_matrix_shots + 1
+        end
+        
+        matrix_learning.matrix_success_rate = matrix_learning.successful_matrix_shots / matrix_learning.total_matrix_shots
+        
+        -- Update matrix confidence correlation
+        local matrix_confidence = record_used.hitbox_matrix_data.confidence or 0
+        local confidence_weight = 0.1
+        local confidence_correlation = shot_hit and matrix_confidence or (1 - matrix_confidence)
+        
+        matrix_learning.matrix_confidence_correlation = 
+            matrix_learning.matrix_confidence_correlation * (1 - confidence_weight) + 
+            confidence_correlation * confidence_weight
+        
+        -- Update hitbox accuracy trend
+        if record_used.hitbox_matrix_data.matrix_accuracy then
+            local accuracy_weight = 0.1
+            local accuracy_correlation = shot_hit and record_used.hitbox_matrix_data.matrix_accuracy or (1 - record_used.hitbox_matrix_data.matrix_accuracy)
+            
+            matrix_learning.hitbox_accuracy_trend = 
+                matrix_learning.hitbox_accuracy_trend * (1 - accuracy_weight) + 
+                accuracy_correlation * accuracy_weight
+        end
+        
+        -- Update prediction reliability
+        if record_used.hitbox_matrix_data.prediction_reliability then
+            local reliability_weight = 0.1
+            local reliability_correlation = shot_hit and record_used.hitbox_matrix_data.prediction_reliability or (1 - record_used.hitbox_matrix_data.prediction_reliability)
+            
+            matrix_learning.prediction_reliability_score = 
+                matrix_learning.prediction_reliability_score * (1 - reliability_weight) + 
+                reliability_correlation * reliability_weight
+        end
+        
+        matrix_learning.last_matrix_update = globals.curtime()
+        
+        -- Debug logging for matrix learning
+        if riptide_v5_debug and ui.get(riptide_v5_debug) then
+# debug_log(string.format(
+                "[BT-MATRIX-LEARNING] Entity: %s | Matrix Success Rate: %.2f | Confidence Correlation: %.2f | Accuracy Trend: %.2f | Reliability: %.2f",
+                entity_get_player_name(entity_index) or "Unknown",
+                matrix_learning.matrix_success_rate,
+                matrix_learning.matrix_confidence_correlation,
+                matrix_learning.hitbox_accuracy_trend,
+                matrix_learning.prediction_reliability_score
+            ))
+        end
+    end
 end
 
--- === ENHANCED BACKTRACK PROCESSING V3 ===
--- Революционная система backtrack с машинным обучением и адаптацией
-local function process_backtrack(entity_index)
+-- === ENHANCED BACKTRACK PROCESSING V4 WITH HITBOX MATRIX ===
+-- Революционная система backtrack с машинным обучением, адаптацией и интеграцией hitbox matrix
+function process_backtrack(entity_index)
     local best_record = get_best_backtrack_record(entity_index)
     if not best_record then
         return false
@@ -4699,7 +7382,7 @@ local function process_backtrack(entity_index)
                                 local score = calculate_advanced_backtrack_score(record, entity_index)
                                 if score > metrics.preferred_score_threshold * 0.8 then
                                     best_record = record
-                                    debug_log("[BT-ADAPTIVE] Using learned optimal record")
+# debug_log("[BT-ADAPTIVE] Using learned optimal record")
                                     break
                                 end
                             end
@@ -4760,13 +7443,38 @@ local function process_backtrack(entity_index)
             y = entity_get_prop(entity_index, "m_angEyeAngles[1]")
         },
         simulation_time = entity_get_prop(entity_index, "m_flSimulationTime"),
-        velocity = vector_new(entity_get_prop(entity_index, "m_vecVelocity")),
+        velocity = vector_new({
+            x = entity_get_prop(entity_index, "m_vecVelocity[0]") or 0,
+            y = entity_get_prop(entity_index, "m_vecVelocity[1]") or 0,
+            z = entity_get_prop(entity_index, "m_vecVelocity[2]") or 0
+        }),
         duck_amount = entity_get_prop(entity_index, "m_flDuckAmount"),
         flags = entity_get_prop(entity_index, "m_fFlags")
     }
     
-    -- === ENHANCED APPLICATION ===
+    -- === HITBOX MATRIX ENHANCED BACKTRACK APPLICATION ===
     local success = apply_backtrack_to_target(entity_index, best_record)
+    
+    -- === HITBOX MATRIX VALIDATION AND LEARNING ===
+    if success and hitbox_matrix_resolving and hitbox_matrix_resolving.get() then
+        local matrix_analysis = analyze_backtrack_record_via_hitbox_matrix(entity_index, best_record)
+        if matrix_analysis then
+            best_record.hitbox_matrix_data = matrix_analysis
+            
+            -- Adjust backtrack intensity based on matrix confidence
+            if matrix_analysis.confidence > 0.8 then
+                backtrack_intensity = backtrack_intensity * 1.2  -- Boost for high confidence
+            elseif matrix_analysis.confidence < 0.4 then
+                backtrack_intensity = backtrack_intensity * 0.8  -- Reduce for low confidence
+            end
+            
+# debug_log(string.format(
+                "[BT-MATRIX-PROCESS] Matrix Confidence: %.2f | Adjusted Intensity: %.2f",
+                matrix_analysis.confidence,
+                backtrack_intensity
+            ))
+        end
+    end
     
     -- Store the record used for learning
     if success then
@@ -4784,39 +7492,39 @@ local function process_backtrack(entity_index)
         local player_name = entity_get_player_name(entity_index)
         local time_diff = globals_curtime() - best_record.simulation_time
         
-        -- === V3 ENHANCED VALIDATION ===
-        -- Ультра продвинутая валидация с новыми системами V3
+        -- === V5 ENHANCED VALIDATION ===
+        -- Ультра продвинутая валидация с новыми системами V5
         local validation_passed = true
         
-        -- Проверяем Riptide V3 совместимость
-        if best_record.riptide_v3_data then
-            local riptide_factor = best_record.riptide_v3_data.riptide_factor
-            local temporal_stability = best_record.riptide_v3_data.temporal_stability
-            local neural_prediction = best_record.riptide_v3_data.neural_network_prediction or 0
-            local quantum_fix = best_record.riptide_v3_data.quantum_entanglement_fix or 0
+        -- Проверяем Riptide V5 совместимость
+        if best_record.riptide_v5_data then
+            local riptide_factor = best_record.riptide_v5_data.riptide_factor
+            local temporal_stability = best_record.riptide_v5_data.temporal_stability
+            local neural_prediction = best_record.riptide_v5_data.enhanced_neural_network_prediction or 0
+            local quantum_fix = best_record.riptide_v5_data.quantum_entanglement_fix or 0
             
             -- Если Riptide фактор слишком высок и стабильность низкая, это может быть ненадежно
             if riptide_factor > 0.8 and temporal_stability < 0.3 then
                 validation_passed = false
-                debug_log(string.format(
+# debug_log(string.format(
                     "[BACKTRACK-V3-WARN] %s | High Riptide factor with low stability: R=%.2f T=%.2f",
                     player_name, riptide_factor, temporal_stability
                 ))
             end
             
-            -- V3 дополнительные проверки
+            -- V5 дополнительные проверки
             -- Если нейросетевое предсказание слишком экстремальное
             if math_abs(neural_prediction) > 50 then
-                debug_log(string.format(
-                    "[BACKTRACK-V3-WARN] %s | Extreme neural prediction: %.1f",
+# debug_log(string.format(
+                    "[BACKTRACK-V5-WARN] %s | Extreme neural prediction: %.1f",
                     player_name, neural_prediction
                 ))
             end
             
             -- Если квантовая коррекция слишком высока
             if math_abs(quantum_fix) > 30 then
-                debug_log(string.format(
-                    "[BACKTRACK-V3-WARN] %s | High quantum correction: %.1f",
+# debug_log(string.format(
+                    "[BACKTRACK-V5-WARN] %s | High quantum correction: %.1f",
                     player_name, quantum_fix
                 ))
             end
@@ -4829,7 +7537,7 @@ local function process_backtrack(entity_index)
             
             -- Если уверенность в направлении очень низкая, предупреждаем
             if direction_confidence < 0.3 then
-                debug_log(string.format(
+# debug_log(string.format(
                     "[BACKTRACK-V2-WARN] %s | Low direction confidence: %.2f method: %s",
                     player_name, direction_confidence, method_used
                 ))
@@ -4840,26 +7548,28 @@ local function process_backtrack(entity_index)
         if player_data[entity_index] then
             local data = player_data[entity_index]
             
-            -- Инициализируем backtrack статистику V3 если нужно
-            if not data.backtrack_v3_stats then
-                data.backtrack_v3_stats = {
+            -- Инициализируем backtrack статистику V5 если нужно
+            if not data.backtrack_v5_stats then
+                data.backtrack_v5_stats = {
                     total_uses = 0,
                     successful_applications = 0,
                     average_riptide_factor = 0,
                     average_direction_confidence = 0,
                     preferred_methods = {},
                     last_use_time = 0,
-                    -- V3 статистика
-                    average_neural_prediction = 0,
+                    -- V5 статистика
+                    average_enhanced_neural_prediction = 0,
                     average_quantum_fix = 0,
                     average_ai_pattern = 0,
-                    v3_success_rate = 0.5,
+                    average_weapon_analysis = 0,
+                    average_map_freestand = 0,
+                    v5_success_rate = 0.5,
                     neural_accuracy = 0.5,
                     quantum_stability = 0.5
                 }
             end
             
-            local bt_stats = data.backtrack_v3_stats
+            local bt_stats = data.backtrack_v5_stats
             bt_stats.total_uses = bt_stats.total_uses + 1
             bt_stats.last_use_time = globals_curtime()
             
@@ -4867,24 +7577,35 @@ local function process_backtrack(entity_index)
                 bt_stats.successful_applications = bt_stats.successful_applications + 1
                 
                 -- Обновляем средние значения
-                if best_record.riptide_v3_data then
+                if best_record.riptide_v5_data then
                     bt_stats.average_riptide_factor = 
-                        (bt_stats.average_riptide_factor * 0.8) + (best_record.riptide_v3_data.riptide_factor * 0.2)
+                        (bt_stats.average_riptide_factor * 0.8) + (best_record.riptide_v5_data.riptide_factor * 0.2)
                     
-                    -- V3 статистика
-                    if best_record.riptide_v3_data.neural_network_prediction then
-                        bt_stats.average_neural_prediction = 
-                            (bt_stats.average_neural_prediction * 0.8) + (math_abs(best_record.riptide_v3_data.neural_network_prediction) * 0.2)
+                    -- V5 статистика
+                    if best_record.riptide_v5_data.enhanced_neural_network_prediction then
+                        bt_stats.average_enhanced_neural_prediction = 
+                            (bt_stats.average_enhanced_neural_prediction * 0.8) + (math_abs(best_record.riptide_v5_data.enhanced_neural_network_prediction) * 0.2)
                     end
                     
-                    if best_record.riptide_v3_data.quantum_entanglement_fix then
+                    if best_record.riptide_v5_data.quantum_entanglement_fix then
                         bt_stats.average_quantum_fix = 
-                            (bt_stats.average_quantum_fix * 0.8) + (math_abs(best_record.riptide_v3_data.quantum_entanglement_fix) * 0.2)
+                            (bt_stats.average_quantum_fix * 0.8) + (math_abs(best_record.riptide_v5_data.quantum_entanglement_fix) * 0.2)
                     end
                     
-                    if best_record.riptide_v3_data.ai_pattern_recognition then
+                    if best_record.riptide_v5_data.ai_pattern_recognition then
                         bt_stats.average_ai_pattern = 
-                            (bt_stats.average_ai_pattern * 0.8) + (math_abs(best_record.riptide_v3_data.ai_pattern_recognition) * 0.2)
+                            (bt_stats.average_ai_pattern * 0.8) + (math_abs(best_record.riptide_v5_data.ai_pattern_recognition) * 0.2)
+                    end
+                    
+                    -- V5 новые компоненты
+                    if best_record.riptide_v5_data.weapon_specific_analysis then
+                        bt_stats.average_weapon_analysis = 
+                            (bt_stats.average_weapon_analysis * 0.8) + (math_abs(best_record.riptide_v5_data.weapon_specific_analysis) * 0.2)
+                    end
+                    
+                    if best_record.riptide_v5_data.map_aware_freestand then
+                        bt_stats.average_map_freestand = 
+                            (bt_stats.average_map_freestand * 0.8) + (math_abs(best_record.riptide_v5_data.map_aware_freestand) * 0.2)
                     end
                 end
                 
@@ -4899,19 +7620,19 @@ local function process_backtrack(entity_index)
                     bt_stats.preferred_methods[method] = bt_stats.preferred_methods[method] + 1
                 end
                 
-                -- Обновляем V3 успешность
+                -- Обновляем V5 успешность
                 local success_rate = bt_stats.successful_applications / bt_stats.total_uses
-                bt_stats.v3_success_rate = (bt_stats.v3_success_rate * 0.9) + (success_rate * 0.1)
+                bt_stats.v5_success_rate = (bt_stats.v5_success_rate * 0.9) + (success_rate * 0.1)
             end
         end
         
-        -- === V3 ENHANCED LOGGING ===
+        -- === V5 ENHANCED LOGGING ===
         local v2_features = best_record.v2_features or {}
-        local riptide_data = best_record.riptide_v3_data or {}
+        local riptide_data = best_record.riptide_v5_data or {}
         local direction_data = best_record.direction_v2_data or {}
         
-        if riptide_v3_debug and ui.get(riptide_v3_debug) and riptide_data.riptide_factor and riptide_data.riptide_factor > 0.3 then
-            debug_log(string.format(
+        if riptide_v5_debug and ui.get(riptide_v5_debug) and riptide_data.riptide_factor and riptide_data.riptide_factor > 0.3 then
+# debug_log(string.format(
                 "[BACKTRACK-APPLIED] %s | Time: %.3fs | Score: %.0f | Valid: %s",
                 player_name or "Unknown",
                 time_diff,
@@ -4926,24 +7647,7 @@ local function process_backtrack(entity_index)
     return false
 end
 
--- Интеграция backtrack в основную систему
-local function enhanced_backtrack_integration()
-    local enemies = entity_get_all("CCSPlayer")
-    
-    for i = 1, #enemies do
-        local entity_index = enemies[i]
-        
-        if entity_is_alive(entity_index) and not entity_is_dormant(entity_index) then
-            -- Обновляем lag records для этого игрока
-            update_lag_records(entity_index)
-            
-            -- Обрабатываем backtrack если нужно
-            if should_use_backtrack(entity_index) then
-                process_backtrack(entity_index)
-            end
-        end
-    end
-end
+-- Интеграция backtrack в основную систему (удалена дублирующаяся функция)
 
 -- Функция для определения, нужно ли использовать backtrack
 
@@ -4979,10 +7683,11 @@ function should_use_backtrack(entity_index)
     local target_origin = {entity_get_prop(entity_index, "m_vecOrigin")}
     if not target_origin[1] then return false end
     
+    local head = get_hitbox_center(entity_index, 0)
     local target_head = {
-        x = target_origin[1],
-        y = target_origin[2],
-        z = target_origin[3] + 64
+        x = head.x ~= 0 and head.x or target_origin[1],
+        y = head.y ~= 0 and head.y or target_origin[2],
+        z = head.z ~= 0 and head.z or (target_origin[3] + 64)
     }
     
     -- FOV calculation
@@ -5022,11 +7727,10 @@ function should_use_backtrack(entity_index)
     end
     
     -- === MOVEMENT ANALYSIS ===
-    local target_velocity = {entity_get_prop(entity_index, "m_vecVelocity")}
-    local velocity_mag = 0
-    if target_velocity[1] then
-        velocity_mag = math.sqrt(target_velocity[1]^2 + target_velocity[2]^2 + target_velocity[3]^2)
-    end
+    local target_velocity_x = entity_get_prop(entity_index, "m_vecVelocity[0]") or 0
+    local target_velocity_y = entity_get_prop(entity_index, "m_vecVelocity[1]") or 0
+    local target_velocity_z = entity_get_prop(entity_index, "m_vecVelocity[2]") or 0
+    local velocity_mag = math.sqrt(target_velocity_x^2 + target_velocity_y^2 + target_velocity_z^2)
     
     -- Backtrack is most effective for moving targets
     if velocity_mag < 5 then
@@ -5034,6 +7738,30 @@ function should_use_backtrack(entity_index)
         local records = lag_records[entity_index]
         if not records or #records < 3 then
             return false
+        end
+    end
+    
+    -- === HITBOX MATRIX INTEGRATION FOR BACKTRACK DECISION ===
+    if hitbox_matrix_resolving and hitbox_matrix_resolving.get() then
+        local matrix_analysis = analyze_backtrack_record_via_hitbox_matrix(entity_index, {origin = target_head})
+        if matrix_analysis then
+            -- Use matrix confidence to adjust backtrack decision
+            if matrix_analysis.confidence < 0.3 then
+                -- Very low confidence - avoid backtrack
+                return false
+            elseif matrix_analysis.confidence < 0.6 then
+                -- Low confidence - be more selective
+                local records = lag_records[entity_index]
+                if not records or #records < 5 then
+                    return false
+                end
+            end
+            
+# debug_log(string.format(
+                "[BT-MATRIX-DECISION] Matrix Confidence: %.2f | Backtrack Decision: %s",
+                matrix_analysis.confidence,
+                "ENABLED"
+            ))
         end
     end
     
@@ -5128,7 +7856,7 @@ function should_use_backtrack(entity_index)
         return false
     end
     
-    debug_log(string.format(
+# debug_log(string.format(
         "[BT-DECISION] Using backtrack for %s (FOV: %.1f, Dist: %.1f, Vel: %.1f)",
         entity.get_player_name(entity_index) or "Unknown", fov, distance, velocity_mag
     ))
@@ -5161,7 +7889,7 @@ client.set_event_callback("weapon_fire", function(e)
                         intensity_used = player_data_entry.backtrack_intensity_used or 1.0
                     }
                     
-                    debug_log(string.format("[BT-SHOT] Fired at %s with backtrack", 
+# debug_log(string.format("[BT-SHOT] Fired at %s with backtrack", 
                         entity.get_player_name(entity_index) or "Unknown"))
                 end
             end
@@ -5184,7 +7912,7 @@ client.set_event_callback("player_hurt", function(e)
             update_backtrack_learning(victim_id, true, shot_data.record_used)
             
             local damage = e.dmg_health or 0
-            debug_log(string.format("[BT-HIT] Successful hit for %d damage (%.3fs after shot)", 
+# debug_log(string.format("[BT-HIT] Successful hit for %d damage (%.3fs after shot)", 
                 damage, time_since_shot))
             
             -- Clean up
@@ -5201,13 +7929,60 @@ client.set_event_callback("paint", function()
         if current_time - shot_data.shot_time > 0.5 then
             -- Count as miss
             update_backtrack_learning(entity_index, false, shot_data.record_used)
-            debug_log("[BT-MISS] Shot timeout - counting as miss")
+# debug_log("[BT-MISS] Shot timeout - counting as miss")
             last_shot_data[entity_index] = nil
         end
     end
     
-    -- Run main backtrack integration
-    enhanced_backtrack_integration()
+    -- === ENHANCED BACKTRACK INTEGRATION WITH HITBOX MATRIX AND FAKE LAG DETECTION ===
+    -- Run main backtrack integration for all entities
+    for entity_index, _ in pairs(player_data) do
+        if entity_is_alive(entity_index) and entity_is_enemy(entity_index) then
+            -- === FAKE LAG DETECTION INTEGRATION ===
+            local fake_lag_analysis = nil
+            if fake_lag_detection_enabled and fake_lag_detection_enabled.get() then
+                fake_lag_analysis = detect_fake_lag_manipulation(entity_index)
+                if fake_lag_analysis and fake_lag_analysis.manipulation_detected then
+# debug_log(string.format(
+                        "[BT-FAKE-LAG] Entity %s: %s manipulation detected | Confidence: %.2f",
+                        entity_get_player_name(entity_index) or "Unknown",
+                        fake_lag_analysis.manipulation_type,
+                        fake_lag_analysis.confidence
+                    ))
+                    
+                    -- Apply fake lag compensation to backtrack
+                    if fake_lag_analysis.compensation_needed then
+                        local compensation = apply_fake_lag_compensation(entity_index, fake_lag_analysis)
+                        if compensation then
+# debug_log(string.format(
+                                "[BT-FAKE-LAG] Applied compensation: %.2f | Type: %s",
+                                compensation.compensation_factor,
+                                compensation.compensation_type
+                            ))
+                        end
+                    end
+                end
+            end
+            
+            local success = enhanced_backtrack_integration(entity_index)
+            if success then
+                -- Update performance metrics
+                backtrack_performance.total_applications = backtrack_performance.total_applications + 1
+                backtrack_performance.successful_applications = backtrack_performance.successful_applications + 1
+                
+                -- Update matrix performance tracking
+                backtrack_performance.matrix_analysis_count = backtrack_performance.matrix_analysis_count + 1
+                
+                -- Store fake lag analysis for learning
+                if fake_lag_analysis then
+                    local player_data_entry = player_data[entity_index]
+                    if player_data_entry then
+                        player_data_entry.last_fake_lag_analysis = fake_lag_analysis
+                    end
+                end
+            end
+        end
+    end
 end)
 
 -- === ENHANCED BACKTRACK PERFORMANCE MONITORING ===
@@ -5216,10 +7991,15 @@ local backtrack_performance = {
     successful_applications = 0,
     total_shots_with_bt = 0,
     hits_with_bt = 0,
-    last_reset = globals.curtime()
+    last_reset = globals.curtime(),
+    -- === HITBOX MATRIX PERFORMANCE TRACKING ===
+    matrix_analysis_count = 0,
+    matrix_high_confidence_hits = 0,
+    matrix_low_confidence_hits = 0,
+    matrix_confidence_correlation = 0.5
 }
 
-local function get_backtrack_performance()
+function get_backtrack_performance()
     local current_time = globals.curtime()
     
     -- Reset stats every 5 minutes
@@ -5229,12 +8009,18 @@ local function get_backtrack_performance()
             successful_applications = 0,
             total_shots_with_bt = 0,
             hits_with_bt = 0,
-            last_reset = current_time
+            last_reset = current_time,
+            -- === HITBOX MATRIX PERFORMANCE TRACKING ===
+            matrix_analysis_count = 0,
+            matrix_high_confidence_hits = 0,
+            matrix_low_confidence_hits = 0,
+            matrix_confidence_correlation = 0.5
         }
     end
     
     local success_rate = 0
     local hit_rate = 0
+    local matrix_performance = 0
     
     if backtrack_performance.total_applications > 0 then
         success_rate = backtrack_performance.successful_applications / backtrack_performance.total_applications
@@ -5244,20 +8030,78 @@ local function get_backtrack_performance()
         hit_rate = backtrack_performance.hits_with_bt / backtrack_performance.total_shots_with_bt
     end
     
+    -- === HITBOX MATRIX PERFORMANCE CALCULATION ===
+    if backtrack_performance.matrix_analysis_count and backtrack_performance.matrix_analysis_count > 0 then
+        local high_confidence_hit_rate = 0
+        local low_confidence_hit_rate = 0
+        
+        if backtrack_performance.matrix_high_confidence_hits and backtrack_performance.matrix_high_confidence_hits > 0 then
+            high_confidence_hit_rate = backtrack_performance.matrix_high_confidence_hits / backtrack_performance.matrix_analysis_count
+        end
+        
+        if backtrack_performance.matrix_low_confidence_hits and backtrack_performance.matrix_low_confidence_hits > 0 then
+            low_confidence_hit_rate = backtrack_performance.matrix_low_confidence_hits / backtrack_performance.matrix_analysis_count
+        end
+        
+        -- Calculate matrix performance as weighted average
+        matrix_performance = (high_confidence_hit_rate * 0.7) + (low_confidence_hit_rate * 0.3)
+        
+        -- Update matrix confidence correlation
+        if backtrack_performance.matrix_confidence_correlation then
+            backtrack_performance.matrix_confidence_correlation = 
+                backtrack_performance.matrix_confidence_correlation * 0.9 + 
+                matrix_performance * 0.1
+        else
+            backtrack_performance.matrix_confidence_correlation = matrix_performance
+        end
+    end
+    
     return {
         application_success_rate = success_rate,
         hit_rate = hit_rate,
-        total_applications = backtrack_performance.total_applications,
-        total_shots = backtrack_performance.total_shots_with_bt
+        total_applications = backtrack_performance.total_applications or 0,
+        total_shots = backtrack_performance.total_shots_with_bt or 0,
+        -- === HITBOX MATRIX PERFORMANCE METRICS ===
+        matrix_performance = matrix_performance,
+        matrix_analysis_count = backtrack_performance.matrix_analysis_count or 0,
+        matrix_confidence_correlation = backtrack_performance.matrix_confidence_correlation or 0.5
     }
 end
 
--- === BACKTRACK AUTO-ADJUSTMENT SYSTEM ===
-local function auto_adjust_backtrack_settings()
+-- === ENHANCED BACKTRACK AUTO-ADJUSTMENT SYSTEM WITH HITBOX MATRIX ===
+function auto_adjust_backtrack_settings()
     local performance = get_backtrack_performance()
     
+    -- === HITBOX MATRIX PERFORMANCE ADJUSTMENT ===
+    if performance.matrix_analysis_count and performance.matrix_analysis_count > 10 then
+        if performance.matrix_performance and performance.matrix_performance < 0.4 then
+            -- Low matrix performance - adjust hitbox matrix settings
+            if hitbox_matrix_resolving and hitbox_matrix_resolving.get() then
+                -- Reduce matrix quality for better performance
+                if hitbox_matrix_quality and hitbox_matrix_quality.get then
+                    local current_quality = hitbox_matrix_quality.get()
+                    if current_quality > 2 then
+                        hitbox_matrix_quality.set(current_quality - 1)
+# debug_log("[BT-MATRIX-AUTO] Reduced matrix quality for better performance")
+                    end
+                end
+            end
+        elseif performance.matrix_performance and performance.matrix_performance > 0.8 then
+            -- High matrix performance - can increase quality
+            if hitbox_matrix_resolving and hitbox_matrix_resolving.get() then
+                if hitbox_matrix_quality and hitbox_matrix_quality.get then
+                    local current_quality = hitbox_matrix_quality.get()
+                    if current_quality < 6 then
+                        hitbox_matrix_quality.set(current_quality + 1)
+# debug_log("[BT-MATRIX-AUTO] Increased matrix quality for better accuracy")
+                    end
+                end
+            end
+        end
+    end
+    
     -- If hit rate is too low, adjust strategy
-    if performance.total_shots > 20 and performance.hit_rate < 0.3 then
+    if performance.total_shots and performance.total_shots > 20 and performance.hit_rate and performance.hit_rate < 0.3 then
         -- Reduce backtrack aggressiveness globally
         for entity_index, player_data_entry in pairs(player_data) do
             if player_data_entry.backtrack_history then
@@ -5270,8 +8114,8 @@ local function auto_adjust_backtrack_settings()
             end
         end
         
-        debug_log("[BT-AUTO] Low hit rate detected, adjusting settings")
-    elseif performance.total_shots > 10 and performance.hit_rate > 0.7 then
+# debug_log("[BT-AUTO] Low hit rate detected, adjusting settings")
+    elseif performance.total_shots and performance.total_shots > 10 and performance.hit_rate and performance.hit_rate > 0.7 then
         -- High hit rate - can be more aggressive
         for entity_index, player_data_entry in pairs(player_data) do
             if player_data_entry.backtrack_history then
@@ -5284,8 +8128,266 @@ local function auto_adjust_backtrack_settings()
             end
         end
         
-        debug_log("[BT-AUTO] High hit rate detected, increasing precision")
+# debug_log("[BT-AUTO] High hit rate detected, increasing precision")
     end
+    
+    -- === MATRIX CONFIDENCE THRESHOLD ADJUSTMENT ===
+    if performance.matrix_confidence_correlation < 0.3 then
+        -- Matrix confidence is not correlating well with actual hits
+# debug_log("[BT-MATRIX-AUTO] Matrix confidence correlation is poor, consider recalibration")
+    end
+end
+
+-- === ENHANCED BACKTRACK INTEGRATION WITH HITBOX MATRIX ===
+-- Функция для интеграции hitbox matrix системы с backtrack
+function enhanced_backtrack_integration(entity_index)
+    if not entity_index or not hitbox_matrix_resolving or not hitbox_matrix_resolving.get() then
+        return false
+    end
+    
+    local records = lag_records[entity_index]
+    if not records or #records < 3 then
+        return false
+    end
+    
+    -- === MATRIX-BASED RECORD VALIDATION ===
+    local validated_records = {}
+    for i, record in ipairs(records) do
+        if record and record.origin then
+            local matrix_validation = validate_hitbox_via_matrix(entity_index, 0, {-15, 0, 15})
+            if matrix_validation and matrix_validation.confidence > 0.5 then
+                table.insert(validated_records, {
+                    record = record,
+                    matrix_confidence = matrix_validation.confidence,
+                    index = i
+                })
+            end
+        end
+    end
+    
+    if #validated_records == 0 then
+        return false
+    end
+    
+    -- Sort by matrix confidence
+    table.sort(validated_records, function(a, b) 
+        return a.matrix_confidence > b.matrix_confidence 
+    end)
+    
+    -- === MATRIX-ENHANCED RECORD SELECTION WITH RIPTIDE V5 ===
+    local best_validated = validated_records[1]
+    if best_validated and best_validated.matrix_confidence > 0.7 then
+        -- === RIPTIDE V5 INTEGRATION ===
+        local riptide_enhancement = nil
+        if best_validated.record.riptide_v5_data then
+            riptide_enhancement = {
+                riptide_factor = best_validated.record.riptide_v5_data.riptide_factor or 0,
+                temporal_stability = best_validated.record.riptide_v5_data.temporal_stability or 0,
+                neural_prediction = best_validated.record.riptide_v5_data.enhanced_neural_network_prediction or 0,
+                quantum_fix = best_validated.record.riptide_v5_data.quantum_entanglement_fix or 0
+            }
+            
+            -- Apply Riptide V5 corrections to matrix confidence
+            local riptide_boost = (riptide_enhancement.riptide_factor * 0.3) + 
+                                 (riptide_enhancement.temporal_stability * 0.25) + 
+                                 (riptide_enhancement.neural_prediction * 0.25) + 
+                                 (riptide_enhancement.quantum_fix * 0.2)
+            
+            local enhanced_confidence = math.min(1.0, best_validated.matrix_confidence + riptide_boost)
+            best_validated.matrix_confidence = enhanced_confidence
+            
+# debug_log(string.format(
+                "[BT-RIPTIDE-V5] Applied Riptide enhancement | Original: %.2f | Enhanced: %.2f | Boost: %.2f",
+                best_validated.matrix_confidence - riptide_boost,
+                enhanced_confidence,
+                riptide_boost
+            ))
+        end
+        
+        -- Use matrix-validated record with Riptide V5 enhancement
+        local success = apply_backtrack_to_target(entity_index, best_validated.record)
+        if success then
+# debug_log(string.format(
+                "[BT-MATRIX-INTEGRATION] Applied matrix-validated record | Confidence: %.2f | Riptide: %s",
+                best_validated.matrix_confidence,
+                riptide_enhancement and "ENHANCED" or "NONE"
+            ))
+            
+            -- Update matrix performance metrics
+            update_matrix_performance_metrics(best_validated.matrix_confidence, true)
+            
+            return true
+        end
+    end
+    
+    return false
+end
+
+-- === MATRIX PERFORMANCE METRICS UPDATE ===
+-- Функция для обновления метрик производительности hitbox matrix
+function update_matrix_performance_metrics(matrix_confidence, was_successful)
+    if not backtrack_performance then return end
+    
+    -- Initialize fields if they don't exist
+    if not backtrack_performance.matrix_analysis_count then
+        backtrack_performance.matrix_analysis_count = 0
+    end
+    if not backtrack_performance.matrix_high_confidence_hits then
+        backtrack_performance.matrix_high_confidence_hits = 0
+    end
+    if not backtrack_performance.matrix_low_confidence_hits then
+        backtrack_performance.matrix_low_confidence_hits = 0
+    end
+    if not backtrack_performance.matrix_confidence_correlation then
+        backtrack_performance.matrix_confidence_correlation = 0.5
+    end
+    
+    -- Update matrix analysis count
+    backtrack_performance.matrix_analysis_count = backtrack_performance.matrix_analysis_count + 1
+    
+    -- Categorize by confidence level
+    if matrix_confidence and matrix_confidence > 0.7 then
+        if was_successful then
+            backtrack_performance.matrix_high_confidence_hits = backtrack_performance.matrix_high_confidence_hits + 1
+        end
+    else
+        if was_successful then
+            backtrack_performance.matrix_low_confidence_hits = backtrack_performance.matrix_low_confidence_hits + 1
+        end
+    end
+    
+    -- Update confidence correlation
+    local current_performance = was_successful and 1.0 or 0.0
+    if matrix_confidence then
+        backtrack_performance.matrix_confidence_correlation = 
+            backtrack_performance.matrix_confidence_correlation * 0.95 + 
+            (matrix_confidence * current_performance) * 0.05
+    end
+end
+
+-- === COMPREHENSIVE BACKTRACK ANALYSIS WITH HITBOX MATRIX ===
+-- Функция для комплексного анализа backtrack системы с интеграцией hitbox matrix
+function comprehensive_backtrack_analysis(entity_index)
+    if not entity_index or not hitbox_matrix_resolving or not hitbox_matrix_resolving.get() then
+        return nil
+    end
+    
+    local analysis = {
+        entity_info = {
+            name = entity_get_player_name(entity_index) or "Unknown",
+            health = entity_get_prop(entity_index, "m_iHealth") or 100,
+            armor = entity_get_prop(entity_index, "m_ArmorValue") or 0
+        },
+        backtrack_status = {
+            records_available = 0,
+            best_record_score = 0,
+            time_range = {min = 0, max = 0},
+            matrix_integration = false
+        },
+        hitbox_matrix_status = {
+            head_matrix_available = false,
+            chest_matrix_available = false,
+            overall_confidence = 0,
+            prediction_reliability = 0
+        },
+        riptide_v5_status = {
+            active = false,
+            riptide_factor = 0,
+            temporal_stability = 0,
+            neural_prediction = 0
+        },
+        fake_lag_status = {
+            detected = false,
+            manipulation_type = "none",
+            compensation_applied = false
+        },
+        recommendations = {}
+    }
+    
+    -- === BACKTRACK STATUS ANALYSIS ===
+    local records = lag_records[entity_index]
+    if records and #records > 0 then
+        analysis.backtrack_status.records_available = #records
+        
+        local best_record = get_best_backtrack_record(entity_index)
+        if best_record then
+            analysis.backtrack_status.best_record_score = best_record.score or 0
+            analysis.backtrack_status.matrix_integration = best_record.hitbox_matrix_data ~= nil
+            
+            if best_record.backtrack_metadata and best_record.backtrack_metadata.time_diff then
+                analysis.backtrack_status.time_range.min = math.min(analysis.backtrack_status.time_range.min, best_record.backtrack_metadata.time_diff)
+                analysis.backtrack_status.time_range.max = math.max(analysis.backtrack_status.time_range.max, best_record.backtrack_metadata.time_diff)
+            end
+        end
+    end
+    
+    -- === HITBOX MATRIX STATUS ANALYSIS ===
+    local head_matrix = get_hitbox_matrix_precise(entity_index, 0)
+    local chest_matrix = get_hitbox_matrix_precise(entity_index, 5)
+    
+    if head_matrix then
+        analysis.hitbox_matrix_status.head_matrix_available = true
+        analysis.hitbox_matrix_status.overall_confidence = analysis.hitbox_matrix_status.overall_confidence + 0.5
+    end
+    
+    if chest_matrix then
+        analysis.hitbox_matrix_status.chest_matrix_available = true
+        analysis.hitbox_matrix_status.overall_confidence = analysis.hitbox_matrix_status.overall_confidence + 0.3
+    end
+    
+    -- Test prediction reliability
+    local velocity_x = entity_get_prop(entity_index, "m_vecVelocity[0]") or 0
+    local velocity_y = entity_get_prop(entity_index, "m_vecVelocity[1]") or 0
+    local velocity_z = entity_get_prop(entity_index, "m_vecVelocity[2]") or 0
+    local velocity = {x = velocity_x, y = velocity_y, z = velocity_z}
+    
+    if velocity_x ~= 0 or velocity_y ~= 0 or velocity_z ~= 0 then
+        local prediction = predict_hitbox_via_matrix(entity_index, 0, 0.1, velocity)
+        if prediction then
+            analysis.hitbox_matrix_status.prediction_reliability = 0.8
+        end
+    end
+    
+    -- === RIPTIDE V5 STATUS ANALYSIS ===
+    local player_data_entry = player_data[entity_index]
+    if player_data_entry and player_data_entry.last_backtrack_record then
+        local record = player_data_entry.last_backtrack_record
+        if record.riptide_v5_data then
+            analysis.riptide_v5_status.active = true
+            analysis.riptide_v5_status.riptide_factor = record.riptide_v5_data.riptide_factor or 0
+            analysis.riptide_v5_status.temporal_stability = record.riptide_v5_data.temporal_stability or 0
+            analysis.riptide_v5_status.neural_prediction = record.riptide_v5_data.enhanced_neural_network_prediction or 0
+        end
+    end
+    
+    -- === FAKE LAG STATUS ANALYSIS ===
+    if fake_lag_detection_enabled and fake_lag_detection_enabled.get() then
+        local fake_lag_analysis = detect_fake_lag_manipulation(entity_index)
+        if fake_lag_analysis and fake_lag_analysis.manipulation_detected then
+            analysis.fake_lag_status.detected = true
+            analysis.fake_lag_status.manipulation_type = fake_lag_analysis.manipulation_type or "unknown"
+            analysis.fake_lag_status.compensation_applied = fake_lag_analysis.compensation_needed or false
+        end
+    end
+    
+    -- === GENERATE RECOMMENDATIONS ===
+    if analysis.backtrack_status.records_available < 3 then
+        table.insert(analysis.recommendations, "Increase backtrack record collection")
+    end
+    
+    if analysis.hitbox_matrix_status.overall_confidence < 0.5 then
+        table.insert(analysis.recommendations, "Improve hitbox matrix accuracy")
+    end
+    
+    if analysis.riptide_v5_status.active and analysis.riptide_v5_status.riptide_factor < 0.3 then
+        table.insert(analysis.recommendations, "Enhance Riptide V5 factors")
+    end
+    
+    if analysis.fake_lag_status.detected and not analysis.fake_lag_status.compensation_applied then
+        table.insert(analysis.recommendations, "Apply fake lag compensation")
+    end
+    
+    return analysis
 end
 
 -- Enhanced pattern-based desync detection
@@ -5362,8 +8464,6 @@ client.set_event_callback("paint", function()
         last_auto_adjust = current_time
     end
 end)
-
--- === NEURAL FEATURE EXTRACTION SYSTEM ===
 local function extract_neural_features(entity_index)
     local features = {}
     local records = lag_records[entity_index] or {}
@@ -5379,16 +8479,12 @@ local function extract_neural_features(entity_index)
     
     -- Velocity features (3 values)
     if entity_is_alive(entity_index) then
-        local vel_x, vel_y, vel_z = entity_get_prop(entity_index, "m_vecVelocity")
-        if vel_x then
-            table.insert(features, math.min(1.0, vel_x / 250.0))
-            table.insert(features, math.min(1.0, vel_y / 250.0))
-            table.insert(features, math.min(1.0, vel_z / 250.0))
-        else
-            table.insert(features, 0)
-            table.insert(features, 0)
-            table.insert(features, 0)
-        end
+        local vel_x = entity_get_prop(entity_index, "m_vecVelocity[0]") or 0
+        local vel_y = entity_get_prop(entity_index, "m_vecVelocity[1]") or 0
+        local vel_z = entity_get_prop(entity_index, "m_vecVelocity[2]") or 0
+        table.insert(features, math.min(1.0, vel_x / 250.0))
+        table.insert(features, math.min(1.0, vel_y / 250.0))
+        table.insert(features, math.min(1.0, vel_z / 250.0))
     else
         table.insert(features, 0)
         table.insert(features, 0)
@@ -5458,6 +8554,207 @@ local function extract_neural_features(entity_index)
     return features
 end
 
+-- === ADVANCED FAKE LAG DETECTION AND COMPENSATION SYSTEM ===
+function detect_fake_lag_manipulation(entity_index, records, network_info)
+    if not records or #records < 5 then
+        return {
+            is_fake_lagging = false,
+            confidence = 0,
+            manipulation_type = "none",
+            compensation_factor = 1.0,
+            network_anomalies = {},
+            timing_patterns = {},
+            packet_manipulation = false
+        }
+    end
+    
+    local fake_lag_data = {
+        is_fake_lagging = false,
+        confidence = 0,
+        manipulation_type = "none",
+        compensation_factor = 1.0,
+        network_anomalies = {},
+        timing_patterns = {},
+        packet_manipulation = false
+    }
+    
+    -- Analyze timing patterns for artificial delays
+    local timing_analysis = {}
+    for i = 1, math.min(8, #records) do
+        if records[i] and records[i + 1] then
+            local time_diff = (records[i].simulation_time or 0) - (records[i + 1].simulation_time or 0)
+            if time_diff > 0 then
+                table.insert(timing_analysis, time_diff)
+            end
+        end
+    end
+    
+    -- Detect suspicious timing patterns
+    if #timing_analysis >= 3 then
+        local avg_timing = 0
+        for _, timing in ipairs(timing_analysis) do
+            avg_timing = avg_timing + timing
+        end
+        avg_timing = avg_timing / #timing_analysis
+        
+        -- Check for unnaturally consistent timing (fake lag indicator)
+        local timing_variance = 0
+        for _, timing in ipairs(timing_analysis) do
+            timing_variance = timing_variance + math.abs(timing - avg_timing)
+        end
+        timing_variance = timing_variance / #timing_analysis
+        
+        -- Low variance suggests artificial timing
+        if timing_variance < 0.001 and avg_timing > 0.008 then
+            fake_lag_data.is_fake_lagging = true
+            fake_lag_data.confidence = math.min(0.9, (0.001 - timing_variance) * 1000)
+            fake_lag_data.manipulation_type = "timing_manipulation"
+            fake_lag_data.timing_patterns = {
+                average = avg_timing,
+                variance = timing_variance,
+                samples = #timing_analysis
+            }
+        end
+    end
+    
+    -- Analyze network packet patterns
+    if network_info then
+        local packet_anomalies = {}
+        
+        -- Check for packet loss manipulation
+        if network_info.packet_loss and network_info.packet_loss.incoming > 0.15 then
+            local loss_pattern = network_info.packet_loss.incoming
+            if loss_pattern > 0.3 then
+                fake_lag_data.packet_manipulation = true
+                fake_lag_data.network_anomalies.packet_loss = loss_pattern
+                fake_lag_data.confidence = math.max(fake_lag_data.confidence, loss_pattern * 0.8)
+            end
+        end
+        
+        -- Check for choke manipulation
+        if network_info.choke and network_info.choke.incoming > 0.2 then
+            local choke_pattern = network_info.choke.incoming
+            if choke_pattern > 0.4 then
+                fake_lag_data.packet_manipulation = true
+                fake_lag_data.network_anomalies.choke = choke_pattern
+                fake_lag_data.confidence = math.max(fake_lag_data.confidence, choke_pattern * 0.7)
+            end
+        end
+        
+        -- Check for latency spikes
+        if network_info.latency and network_info.latency.incoming > 0.1 then
+            local latency_spike = network_info.latency.incoming
+            if latency_spike > 0.15 then
+                fake_lag_data.network_anomalies.latency_spike = latency_spike
+                fake_lag_data.confidence = math.max(fake_lag_data.confidence, (latency_spike - 0.1) * 2)
+            end
+        end
+    end
+    
+    -- Analyze movement patterns for artificial stuttering
+    local movement_analysis = {}
+    for i = 1, math.min(6, #records) do
+        if records[i] and records[i].velocity then
+            local speed = vector_length(records[i].velocity)
+            table.insert(movement_analysis, speed)
+        end
+    end
+    
+    if #movement_analysis >= 4 then
+        local speed_variance = 0
+        local avg_speed = 0
+        for _, speed in ipairs(movement_analysis) do
+            avg_speed = avg_speed + speed
+        end
+        avg_speed = avg_speed / #movement_analysis
+        
+        for _, speed in ipairs(movement_analysis) do
+            speed_variance = speed_variance + math.abs(speed - avg_speed)
+        end
+        speed_variance = speed_variance / #movement_analysis
+        
+        -- Unnaturally consistent speed during movement suggests fake lag
+        if avg_speed > 50 and speed_variance < 5 then
+            fake_lag_data.is_fake_lagging = true
+            fake_lag_data.confidence = math.max(fake_lag_data.confidence, (5 - speed_variance) * 0.2)
+            fake_lag_data.manipulation_type = "movement_manipulation"
+        end
+    end
+    
+    -- Calculate compensation factor based on confidence
+    if fake_lag_data.is_fake_lagging then
+        local base_compensation = 1.0 + (fake_lag_data.confidence * 0.5)
+        
+        -- Additional compensation for different manipulation types
+        if fake_lag_data.manipulation_type == "timing_manipulation" then
+            base_compensation = base_compensation * 1.3
+        elseif fake_lag_data.manipulation_type == "movement_manipulation" then
+            base_compensation = base_compensation * 1.2
+        end
+        
+        if fake_lag_data.packet_manipulation then
+            base_compensation = base_compensation * 1.4
+        end
+        
+        fake_lag_data.compensation_factor = math.min(2.5, base_compensation)
+    end
+    
+    return fake_lag_data
+end
+
+-- === ENHANCED FAKE LAG COMPENSATION ===
+function apply_fake_lag_compensation(entity_index, fake_lag_data, base_desync, direction_data, network_info)
+    if not fake_lag_data or not fake_lag_data.is_fake_lagging then
+        return base_desync, direction_data
+    end
+    
+    local compensated_desync = base_desync
+    local compensated_direction = direction_data
+    
+    -- Apply timing manipulation compensation
+    if fake_lag_data.manipulation_type == "timing_manipulation" then
+        local timing_boost = fake_lag_data.timing_patterns.average * 1000
+        compensated_desync = compensated_desync * (1 + timing_boost * 0.1)
+        
+        -- Adjust direction prediction for timing manipulation
+        if fake_lag_data.timing_patterns.variance < 0.0005 then
+            -- Very low variance suggests predictable fake lag
+            compensated_direction.prediction_strength = math.min(0.95, compensated_direction.prediction_strength + 0.2)
+        end
+    end
+    
+    -- Apply movement manipulation compensation
+    if fake_lag_data.manipulation_type == "movement_manipulation" then
+        compensated_desync = compensated_desync * 1.15
+        
+        -- Enhance movement prediction
+        compensated_direction.movement_confidence = (compensated_direction.movement_confidence or 0.5) + 0.15
+    end
+    
+    -- Apply packet manipulation compensation
+    if fake_lag_data.packet_manipulation then
+        local packet_compensation = 1.0
+        
+        if fake_lag_data.network_anomalies.packet_loss then
+            packet_compensation = packet_compensation + (fake_lag_data.network_anomalies.packet_loss * 0.5)
+        end
+        
+        if fake_lag_data.network_anomalies.choke then
+            packet_compensation = packet_compensation + (fake_lag_data.network_anomalies.choke * 0.3)
+        end
+        
+        compensated_desync = compensated_desync * packet_compensation
+    end
+    
+    -- Apply overall compensation factor
+    compensated_desync = compensated_desync * fake_lag_data.compensation_factor
+    
+    -- Enhance prediction confidence for fake lag scenarios
+    compensated_direction.prediction_strength = math.min(0.95, compensated_direction.prediction_strength + (fake_lag_data.confidence * 0.1))
+    
+    return compensated_desync, compensated_direction
+end
+
 -- === ENHANCED AISETPOS RESOLUTION SYSTEM V4 ===
 local function resolve_aisetpos(entity_index)
     if not entity_is_alive(entity_index) or entity_is_dormant(entity_index) then
@@ -5465,7 +8762,10 @@ local function resolve_aisetpos(entity_index)
     end
     
     local records = lag_records[entity_index]
-    if not records or #records < 3 then return 0 end
+    if not records or #records < 3 then
+        local fallback_yaw = entity_get_prop(entity_index, "m_angEyeAngles[1]") or entity_get_prop(entity_index, "m_angEyeAngles", 1) or 0
+        return normalize_angle_safe(fallback_yaw)
+    end
 
     local player_name = entity_get_player_name(entity_index)
     if not player_name then return 0 end
@@ -5508,8 +8808,45 @@ local function resolve_aisetpos(entity_index)
     end
 
     local data = player_data[entity_index]
+
+    -- Ensure required substructures exist (in case player_data was created minimally elsewhere)
+    if not data.yaw_history then data.yaw_history = {} end
+    if not data.desync_history then data.desync_history = {} end
+    if not data.velocity_history then data.velocity_history = {} end
+    if not data.performance_metrics then
+        data.performance_metrics = {
+            accuracy = 0,
+            consistency = 0,
+            last_update = 0,
+            resolution_quality = 0.0,
+            hit_probability = 0.5,
+            miss_rate = 0.5,
+            adaptive_success = 0.5,
+            network_correlation_accuracy = 0.5
+        }
+    end
+    if not data.behavioral_analysis then
+        data.behavioral_analysis = {
+            aggression = 0.5,
+            predictability = 0.5,
+            adaptation_rate = 0.5,
+            network_sensitivity = 0.5,
+            packet_correlation = 0.0,
+            latency_adaptation = 0.0,
+            jitter_resistance = 0.5
+        }
+    end
+
     local current_record = records[1]
-    local velocity_data = vector_new(entity_get_prop(entity_index, "m_vecVelocity"))
+    local velocity_x = entity_get_prop(entity_index, "m_vecVelocity[0]") or 0
+    local velocity_y = entity_get_prop(entity_index, "m_vecVelocity[1]") or 0
+    local velocity_z = entity_get_prop(entity_index, "m_vecVelocity[2]") or 0
+    local velocity_data = vector_new({x = velocity_x, y = velocity_y, z = velocity_z})
+    
+    -- Ensure direction memory exists
+    if not data.direction_memory then
+        data.direction_memory = { last_directions = {}, left_count = 0, right_count = 0, stability = 0.5 }
+    end
     
     -- Get network state
     local network_info = network_channel_system:get_network_info()
@@ -5531,6 +8868,14 @@ local function resolve_aisetpos(entity_index)
     -- Enhanced jitter detection with network awareness
     local jitter_analysis = wide_jitter_detection(entity_index, angle_history)
     
+    -- === ADVANCED FAKE LAG DETECTION ===
+    local fake_lag_data = nil
+    if fake_lag_detection_enabled and fake_lag_detection_enabled.get() then
+        fake_lag_data = detect_fake_lag_manipulation(entity_index, records, network_info)
+    else
+        fake_lag_data = { is_fake_lagging = false, confidence = 0, manipulation_type = "none", compensation_factor = 1.0 }
+    end
+    
     -- Neural network feature extraction
     local neural_features = extract_neural_features(entity_index)
     
@@ -5540,6 +8885,13 @@ local function resolve_aisetpos(entity_index)
         on_ground = bit.band(current_record.flags or 0, 1) == 1,
         ducking = current_record.duck_amount and current_record.duck_amount > 0.1
     }, velocity_data)
+
+    -- Freestand bias
+    local freestand = compute_freestand_bias(entity_index)
+    if freestand.confidence > 0.1 then
+        direction_data.final_direction = (freestand.dir ~= 0) and freestand.dir or direction_data.final_direction
+        direction_data.prediction_strength = (direction_data.prediction_strength or 0.5) * (1 + freestand.confidence * 0.2)
+    end
     
     -- Initialize quantum state for advanced prediction
     local quantum_state = {
@@ -5565,14 +8917,48 @@ local function resolve_aisetpos(entity_index)
             velocity_data,
             player_state,
             quantum_state,
-            angle_history,
+            network_data,
             entity_index
         )
     end
     
     -- Calculate base desync
-    local resolved_yaw = current_record.angles.y
-    local base_desync = 30 -- Dynamic base value
+    local resolved_yaw = safe_number(current_record.angles and current_record.angles.y, 0)
+
+    -- Prefer animation-based dynamic desync when possible
+    local dynamic_desync = 0
+    if current_record.animlayers and current_record.velocity then
+        dynamic_desync = math.abs(analyze_movement_layers(current_record.animlayers, current_record.velocity, {
+            moving = vector_length(current_record.velocity) > 5,
+            on_ground = bit.band(current_record.flags or 0, 1) == 1,
+            ducking = (current_record.duck_amount or 0) > 0.1
+        }))
+    end
+
+    local lby_desync = analyze_desync_angle(entity_index)
+    local base_desync = math.max(dynamic_desync or 0, lby_desync or 0)
+
+    if base_desync == nil or base_desync <= 0 then
+        -- fallback to recent history variance
+        if data and data.desync_history and #data.desync_history >= 3 then
+            local sum = 0
+            local n = math.min(6, #data.desync_history)
+            for i = #data.desync_history - n + 1, #data.desync_history do
+                sum = sum + math.abs(data.desync_history[i])
+            end
+            base_desync = math.min(58, (sum / n))
+        else
+            base_desync = 25
+        end
+    end
+    -- weapon and movement aware clamp
+    do
+        local weapon = entity_get_player_weapon(entity_get_local_player())
+        local wname = weapon and entity_get_classname(weapon):lower() or 'unknown'
+        local is_smg = wname:find('mp') or wname:find('bizon') or wname:find('p90') or wname:find('ump')
+        local speed2d = vec_len2d(velocity_data)
+        if is_smg and speed2d > 40 then base_desync = math.min(base_desync, 40) end
+    end
     
     -- Apply jitter analysis
     if jitter_analysis.is_wide_jitter then
@@ -5580,31 +8966,189 @@ local function resolve_aisetpos(entity_index)
         
         -- Network quality adjustment
         if network_quality then
-            local network_stability = network_quality.score or 1.0
-            jitter_correction = jitter_correction * network_stability
-            
-            -- Additional compensation for high latency
-            if network_info and network_info.latency then
-                local avg_latency = (network_info.latency.incoming + network_info.latency.outgoing) / 2
-                if avg_latency > 0.05 then
-                    jitter_correction = jitter_correction * (1 + (avg_latency - 0.05) * 2)
+                    local network_stability = network_quality.score or 1.0
+        jitter_correction = jitter_correction * network_stability
+        
+        -- Additional compensation for high latency
+        if network_info and network_info.latency then
+            local avg_latency = (network_info.latency.incoming + network_info.latency.outgoing) / 2
+            if avg_latency > 0.05 then
+                -- scale down jitter correction to avoid over-rotation at high ping
+                local damp = math_min(0.9, (avg_latency - 0.05) * 3)
+                jitter_correction = jitter_correction * (1 - damp)
+            end
+        end
+        end
+        
+            -- Force positive correction (requirement)
+    jitter_correction = math.abs(jitter_correction)
+
+    -- Direction smoothing with last decisions
+    data.direction_memory = data.direction_memory or {last_directions = {}}
+    local last_dir = 0
+    if #data.direction_memory.last_directions > 0 then
+        last_dir = data.direction_memory.last_directions[#data.direction_memory.last_directions].direction or 0
+    end
+
+    -- Apply direction with network + freestand compensation
+    local direction = (compensated_direction and compensated_direction.final_direction) or (direction_data and direction_data.final_direction) or 1
+    if freestand and freestand.confidence > 0.2 then
+        direction = freestand.dir ~= 0 and freestand.dir or direction
+    end
+    if last_dir ~= 0 and direction ~= last_dir then
+        -- Smooth flips when confidence is low
+        local prediction_strength = compensated_direction and compensated_direction.prediction_strength or direction_data.prediction_strength
+        if (prediction_strength or 0.5) < 0.6 then
+            direction = last_dir
+        end
+    end
+
+    -- Flip briefly only on resolver miss
+    if data.resolver_flip_until and globals.curtime() < data.resolver_flip_until then
+        direction = -direction
+    end
+
+    -- Local movement bias: use our lateral motion to bias side
+    do
+        local lp = entity_get_local_player()
+        if lp then
+            local lv_x = entity_get_prop(lp, "m_vecVelocity[0]") or 0
+        local lv_y = entity_get_prop(lp, "m_vecVelocity[1]") or 0
+        local lv_z = entity_get_prop(lp, "m_vecVelocity[2]") or 0
+        local lv = vector_new({x = lv_x, y = lv_y, z = lv_z})
+            local speed2d = vec_len2d(lv)
+            if speed2d > 30 then
+                local ex, ey, ez = entity_get_origin(entity_index)
+                local lx, ly, lz = entity_get_origin(lp)
+                if ex and lx then
+                    local e2l = {x = lx - ex, y = ly - ey, z = 0}
+                    local cross = e2l.x * lv.y - e2l.y * lv.x
+                    local bias_sign = cross >= 0 and 1 or -1
+                    local bias_strength = math_min(1.0, speed2d / 250)
+                    local prediction_strength = compensated_direction and compensated_direction.prediction_strength or direction_data.prediction_strength
+                    if (prediction_strength or 0.5) < 0.8 then
+                        direction = (bias_strength > 0.25) and bias_sign or direction
+                    end
                 end
             end
         end
+    end
+
+    -- Target velocity bias: use enemy lateral motion around its facing
+    do
+        local tv_x = entity_get_prop(entity_index, "m_vecVelocity[0]") or 0
+        local tv_y = entity_get_prop(entity_index, "m_vecVelocity[1]") or 0
+        local tv_z = entity_get_prop(entity_index, "m_vecVelocity[2]") or 0
+        local tv = vector_new({x = tv_x, y = tv_y, z = tv_z})
+        local spd = vec_len2d(tv)
+        if spd > 30 then
+            local yaw_basis = (current_record and current_record.angles and current_record.angles.y) or resolved_yaw
+            local fy = math_rad(yaw_basis)
+            local fwd = {x = math_cos(fy), y = math_sin(fy), z = 0}
+            local vnorm = vec_normalize(tv)
+            local cross = fwd.x * vnorm.y - fwd.y * vnorm.x
+            local lateral_weight = math_abs(cross)
+            local bias_sign = (cross >= 0) and 1 or -1
+            local dir_conf = compensated_direction and compensated_direction.prediction_strength or direction_data.prediction_strength
+            if dir_conf < 0.85 then
+                if lateral_weight > 0.35 then
+                    direction = bias_sign
+                elseif dir_conf < 0.6 and lateral_weight > 0.2 then
+                    direction = bias_sign
+                end
+            end
+        end
+    end
+
+    -- Visibility-based validation of chosen side (bbox face multi-point if available)
+    do
+        local e1, e2, e3 = client.eye_position()
+        local ex1, ey1, ez1
+        if type(e1) == 'number' and type(e2) == 'number' and type(e3) == 'number' then
+            ex1, ey1, ez1 = e1, e2, e3
+        elseif type(e1) == 'table' and e1[1] and e1[2] and e1[3] then
+            ex1, ey1, ez1 = e1[1], e1[2], e1[3]
+        end
+        if ex1 then
+            local bbox = get_hitbox_bbox_via_studio and get_hitbox_bbox_via_studio(entity_index, 0)
+            if bbox and bbox.mins and bbox.maxs and bbox.center then
+                local function sample_face_points(left)
+                    local pts = {}
+                    local cx, cy, cz = bbox.center.x, bbox.center.y, bbox.center.z
+                    local mx, my, mz = bbox.mins.x, bbox.mins.y, bbox.mins.z
+                    local Mx, My, Mz = bbox.maxs.x, bbox.maxs.y, bbox.maxs.z
+                    if left then
+                        table.insert(pts, {x = mx, y = cy, z = cz})
+                        table.insert(pts, {x = mx, y = My, z = cz})
+                        table.insert(pts, {x = mx, y = my, z = cz})
+                    else
+                        table.insert(pts, {x = Mx, y = cy, z = cz})
+                        table.insert(pts, {x = Mx, y = My, z = cz})
+                        table.insert(pts, {x = Mx, y = my, z = cz})
+                    end
+                    return pts
+                end
+                local function best_frac(pts)
+                    local best = 0
+                    for _, p in ipairs(pts) do
+                        local ok, trb = pcall(function()
+                            return client.trace_bullet(entity_get_local_player(), ex1, ey1, ez1, p.x, p.y, p.z, entity_index)
+                        end)
+                        if ok and trb and trb.fraction and trb.fraction > best then best = trb.fraction end
+                    end
+                    return best
+                end
+                local fl = best_frac(sample_face_points(true))
+                local fr = best_frac(sample_face_points(false))
+                if math_abs(fl - fr) > 0.05 then
+                    direction = (fr > fl) and 1 or -1
+                end
+            else
+                local center = get_hitbox_center(entity_index, 0)
+                local off = 10
+                local ly = math_rad(normalize_angle_safe(resolved_yaw - base_desync))
+                local ry = math_rad(normalize_angle_safe(resolved_yaw + base_desync))
+                local lpos = {x = center.x + math_cos(ly) * off, y = center.y + math_sin(ly) * off, z = center.z}
+                local rpos = {x = center.x + math_cos(ry) * off, y = center.y + math_sin(ry) * off, z = center.z}
+                local fl, fr = 0, 0
+                local ok_l, tb_l = pcall(function()
+                    return client.trace_bullet(entity_get_local_player(), ex1, ey1, ez1, lpos.x, lpos.y, lpos.z, entity_index)
+                end)
+                local ok_r, tb_r = pcall(function()
+                    return client.trace_bullet(entity_get_local_player(), ex1, ey1, ez1, rpos.x, rpos.y, rpos.z, entity_index)
+                end)
+                if ok_l and tb_l then fl = tb_l.fraction or 0 end
+                if ok_r and tb_r then fr = tb_r.fraction or 0 end
+                if fl == 0 and fr == 0 then
+                    local tl = client.trace_line(ex1, ey1, ez1, lpos.x, lpos.y, lpos.z, entity_index)
+                    local tr = client.trace_line(ex1, ey1, ez1, rpos.x, rpos.y, rpos.z, entity_index)
+                    fl = type(tl) == 'number' and tl or (tl and tl.fraction) or 1
+                    fr = type(tr) == 'number' and tr or (tr and tr.fraction) or 1
+                end
+                if math_abs(fl - fr) > 0.05 then
+                    direction = (fr > fl) and 1 or -1
+                end
+            end
+        end
+    end
         
-        -- Force positive correction (requirement)
-        jitter_correction = math.abs(jitter_correction)
-        
-        -- Apply direction with network compensation
-        local direction = direction_data.final_direction
+        -- Final safety check for direction variable
+        if not direction or type(direction) ~= "number" then
+            direction = 1 -- fallback to default direction
+        end
         
         -- Network-based direction adjustment
         if network_info and network_info.network_jitter_detected then
             local packet_correlation = jitter_analysis.packet_correlation or 0
-            if packet_correlation > 0.5 then
+            if packet_correlation > 0.5 and direction then
                 direction = direction * (packet_correlation > 0.7 and -1 or 1)
             end
         end
+        
+        -- === APPLY FAKE LAG COMPENSATION ===
+        local compensated_desync, compensated_direction = apply_fake_lag_compensation(
+            entity_index, fake_lag_data, jitter_correction, direction_data, network_info
+        )
         
         -- Calculate final desync with network awareness
         local network_desync_modifier = 1.0
@@ -5612,21 +9156,31 @@ local function resolve_aisetpos(entity_index)
             network_desync_modifier = 1.2
         end
         
-        base_desync = jitter_correction * network_desync_modifier
-        resolved_yaw = resolved_yaw + (direction * base_desync)
+        -- Apply fake lag compensation to final desync
+        if fake_lag_data.is_fake_lagging then
+            network_desync_modifier = network_desync_modifier * fake_lag_data.compensation_factor
+        end
+        
+        base_desync = compensated_desync * network_desync_modifier
+        if direction then
+            resolved_yaw = resolved_yaw + (direction * base_desync)
+        else
+            resolved_yaw = resolved_yaw + base_desync -- fallback без направления
+        end
         
         -- Store direction with network context
-        table.insert(data.direction_memory.last_directions, {
-            direction = direction,
-            correction = base_desync,
-            timestamp = globals.curtime(),
-            network_influenced = jitter_analysis.classification_data and 
-                jitter_analysis.classification_data.network_influenced or false,
-            latency_compensation = network_info and network_info.latency and 
-                ((network_info.latency.incoming + network_info.latency.outgoing) / 2) > 0.05 and
-                ((network_info.latency.incoming + network_info.latency.outgoing) / 2) or 0,
-            packet_correlation = jitter_analysis.packet_correlation or 0
-        })
+        if direction then
+            table.insert(data.direction_memory.last_directions, {
+                direction = direction,
+                correction = base_desync,
+                timestamp = globals.curtime(),
+                network_influenced = jitter_analysis.classification_data and 
+                    jitter_analysis.classification_data.network_influenced or false,
+                latency_compensation = network_info and network_info.latency and 
+                    (((network_info.latency.incoming + network_info.latency.outgoing) / 2) or 0),
+                packet_correlation = jitter_analysis.packet_correlation or 0
+            })
+        end
         
         while #data.direction_memory.last_directions > 10 do
             table.remove(data.direction_memory.last_directions, 1)
@@ -5673,6 +9227,55 @@ local function resolve_aisetpos(entity_index)
         riptide_perf.last_update = globals.curtime()
     end
     
+    -- === HITBOX MATRIX INTEGRATION FOR AISETPOS ===
+    -- Интеграция системы матрицы хитбоксов для улучшения резольвинга в AISETPOS
+    -- Автоматически включено для максимальной производительности
+    do
+        local matrix_resolution = integrate_hitbox_matrix_resolving(
+            entity_index, 
+            base_desync, 
+            data.performance_metrics.resolution_quality or 0.5, 
+            0 -- Голова по умолчанию
+        )
+        
+        if matrix_resolution and matrix_resolution.matrix_analysis then
+            -- Применяем коррекцию от матрицы хитбоксов
+            local matrix_correction = matrix_resolution.desync - base_desync
+            local final_desync = base_desync + (matrix_correction * 0.35)
+            
+            -- Обновляем resolved_yaw с коррекцией от матрицы
+            if direction then
+                resolved_yaw = resolved_yaw + (direction * matrix_correction * 0.35)
+            else
+                resolved_yaw = resolved_yaw + (matrix_correction * 0.35) -- fallback без направления
+            end
+            
+            -- Улучшаем качество резольвинга на основе анализа матрицы
+            data.performance_metrics.resolution_quality = math.min(1.0, 
+                (data.performance_metrics.resolution_quality or 0.5) + (matrix_resolution.confidence - (data.performance_metrics.resolution_quality or 0.5)) * 0.25
+            )
+            
+            -- Сохраняем информацию о матрице для отладки
+            data.hitbox_matrix_data = {
+                correction = matrix_correction,
+                confidence = matrix_resolution.confidence,
+                prediction = matrix_resolution.prediction,
+                timestamp = globals.curtime()
+            }
+            
+            -- Debug логирование для матрицы хитбоксов в AISETPOS
+            if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format(
+                    "[AISETPOS-MATRIX] Entity: %s | Matrix Correction: %.2f | Confidence: %.2f | Final Desync: %.2f",
+                    player_name,
+                    matrix_correction,
+                    matrix_resolution.confidence,
+                    final_desync
+                ))
+            end
+        end
+    end
+    
     -- Enhanced performance tracking
     data.last_resolve = globals.curtime()
     data.performance_metrics.last_update = globals.curtime()
@@ -5697,7 +9300,8 @@ local function resolve_aisetpos(entity_index)
         jitter_confidence = jitter_analysis.confidence,
         network_stability = network_quality and network_quality.score or 1.0,
         packet_correlation = jitter_analysis.packet_correlation or 0,
-        prediction_accuracy = direction_data.prediction_strength or 0.5
+        prediction_accuracy = (compensated_direction and compensated_direction.prediction_strength or direction_data.prediction_strength or 0.5)
+            + (freestand and freestand.confidence or 0) * 0.1
     }
     
     data.performance_metrics.resolution_quality = 
@@ -5705,27 +9309,107 @@ local function resolve_aisetpos(entity_index)
         (quality_factors.network_stability * 0.3) +
         (quality_factors.packet_correlation * 0.2) +
         (quality_factors.prediction_accuracy * 0.1)
+
+    -- Update desync history for future dynamic estimation
+    data.desync_history = data.desync_history or {}
+    table_insert(data.desync_history, base_desync)
+    if #data.desync_history > 32 then table.remove(data.desync_history, 1) end
     
     -- Anti-detection variance
     local time_variance = math.sin(globals.curtime() * 1.7 + entity_index) * 1.5
-    resolved_yaw = resolved_yaw + time_variance
+
+    -- Angle smoothing with wrap-aware lerp before variance
+    data.yaw_history = data.yaw_history or {}
+    local prev_yaw = data.yaw_history[1] or resolved_yaw
+    local resq = (data.performance_metrics and data.performance_metrics.resolution_quality) or 0.5
+    local weapon = entity_get_player_weapon(entity_get_local_player())
+    local wname = weapon and entity_get_classname(weapon):lower() or 'unknown'
+    local is_sniper = wname:find('awp') or wname:find('ssg') or wname:find('scar') or wname:find('g3')
+    local base_t = 0.2 + resq * 0.6
+    if is_sniper then base_t = base_t * 0.85 end  -- чуть менее агрессивное сглаживание для точных выстрелов
+    base_t = math_max(0.15, math_min(0.9, base_t))
+    local smoothed_core = angle_lerp(prev_yaw, resolved_yaw, base_t)
+
+    resolved_yaw = normalize_angle_safe(smoothed_core + time_variance * (is_sniper and 0.5 or 1.0))
+
+    table.insert(data.yaw_history, 1, resolved_yaw)
+    if #data.yaw_history > 16 then table.remove(data.yaw_history) end
     
     -- Debug logging
-    if riptide_v3_debug and ui.get(riptide_v3_debug) then
-        debug_log(string.format(
-            "[AISETPOS-V4] %s | Yaw: %.1f° | Desync: %.1f° | Quality: %.2f | Network: %.2f | Latency: %.1fms",
+    if riptide_v5_debug and ui.get(riptide_v5_debug) then
+        local fake_lag_info = ""
+        if fake_lag_data and fake_lag_data.is_fake_lagging then
+            fake_lag_info = string.format(" | FakeLag: %s(%.2f) | Type: %s", 
+                fake_lag_data.is_fake_lagging and "YES" or "NO",
+                fake_lag_data.confidence,
+                fake_lag_data.manipulation_type
+            )
+        end
+        
+# debug_log(string.format(
+            "[AISETPOS-V4] %s | Yaw: %.1f° | Desync: %.1f° | Quality: %.2f | Network: %.2f | Latency: %.1fms%s",
             player_name,
-            normalize_angle(resolved_yaw),
+            normalize_angle_safe(resolved_yaw),
             base_desync,
             data.performance_metrics.resolution_quality,
             network_quality and network_quality.score or 1.0,
-            network_info and ((network_info.latency.incoming + network_info.latency.outgoing) / 2) * 1000 or 0
+            network_info and ((network_info.latency.incoming + network_info.latency.outgoing) / 2) * 1000 or 0,
+            fake_lag_info
         ))
     end
     
-    return resolved_yaw
+    return normalize_angle_safe(safe_number(resolved_yaw, current_record.angles.y or 0))
 end
     
+-- Hitbox face points (prefer studiohdr bbox faces; fallback to bone basis)
+local function get_hitbox_face_points(entity_index, hitbox_id)
+    hitbox_id = hitbox_id or 0
+    local bbox = get_hitbox_bbox_via_studio and get_hitbox_bbox_via_studio(entity_index, hitbox_id)
+    if bbox and bbox.mins and bbox.maxs and bbox.center then
+        local cx, cy, cz = bbox.center.x, bbox.center.y, bbox.center.z
+        local mx, my, mz = bbox.mins.x, bbox.mins.y, bbox.mins.z
+        local Mx, My, Mz = bbox.maxs.x, bbox.maxs.y, bbox.maxs.z
+        return {
+            {x=cx,y=cy,z=cz},
+            {x=mx,y=cy,z=cz},{x=Mx,y=cy,z=cz},
+            {x=cx,y=my,z=cz},{x=cx,y=My,z=cz},
+            {x=cx,y=cy,z=mz},{x=cx,y=cy,z=Mz},
+            {x=mx,y=my,z=cz},{x=Mx,y=My,z=cz},{x=mx,y=My,z=cz},{x=Mx,y=my,z=cz}
+        }
+    end
+    -- fallback: bone basis
+    local center = get_hitbox_center(entity_index, hitbox_id)
+    local bones = get_bones_cached and get_bones_cached(entity_index) or nil
+    local mat
+    if bones and bones[0] then
+        for _, bone in ipairs({8,7,6}) do
+            if bones[bone] then mat = bones[bone]; break end
+        end
+    end
+    local right, forward, up
+    if mat then
+        right   = {x = mat[0][0], y = mat[1][0], z = mat[2][0]}
+        forward = {x = mat[0][1], y = mat[1][1], z = mat[2][1]}
+        up      = {x = mat[0][2], y = mat[1][2], z = mat[2][2]}
+    else
+        right, forward, up = {x=1,y=0,z=0}, {x=0,y=1,z=0}, {x=0,y=0,z=1}
+    end
+    local ex, ey, ez = 5, 5, 7
+    local pts = {}
+    local function add(p) table.insert(pts, p) end
+    add(vec_add(center, vec_scale(right,  ex)))
+    add(vec_add(center, vec_scale(right, -ex)))
+    add(vec_add(center, vec_scale(forward,  ey)))
+    add(vec_add(center, vec_scale(forward, -ey)))
+    add(vec_add(center, vec_scale(up,  ez)))
+    add(vec_add(center, vec_scale(up, -ez)))
+    add(vec_add(center, vec_add(vec_scale(right, ex), vec_scale(up, ez))))
+    add(vec_add(center, vec_add(vec_scale(right,-ex), vec_scale(up, ez))))
+    add(vec_add(center, vec_add(vec_scale(right, ex), vec_scale(up,-ez))))
+    add(vec_add(center, vec_add(vec_scale(right,-ex), vec_scale(up,-ez))))
+    return pts
+end
+
 -- === IMPROVED LC RESOLVER ===
 local function resolve_lc_prediction(entity_index)
     local records = lag_records[entity_index]
@@ -5736,27 +9420,161 @@ local function resolve_lc_prediction(entity_index)
     
     -- Simple LC prediction based on current record
     local current_record = records[1]
-    local velocity = vector_new(entity_get_prop(entity_index, "m_vecVelocity"))
+    local velocity_x = entity_get_prop(entity_index, "m_vecVelocity[0]") or 0
+    local velocity_y = entity_get_prop(entity_index, "m_vecVelocity[1]") or 0
+    local velocity_z = entity_get_prop(entity_index, "m_vecVelocity[2]") or 0
+    local velocity = vector_new({x = velocity_x, y = velocity_y, z = velocity_z})
     
     -- Basic prediction calculation
-    local ping = math.max(0.016, globals_frametime() * 2)
-    local ticks_to_predict = math.min(15, math.ceil(ping / globals_tickinterval()) + 2)
+    local network_info = network_channel_system:get_network_info()
+    local avg_latency = network_info and (network_info.latency.incoming + network_info.latency.outgoing) / 2 or globals_frametime()
+    local choke = network_info and (network_info.choke.incoming + network_info.choke.outgoing) / 2 or 0
+    -- latency-aware horizon (more conservative at high ping)
+    local net_dt = avg_latency * (1 + choke * 0.5)
+    if avg_latency > 0.07 then net_dt = net_dt * 0.8 end
+    local ticks_to_predict = math.min(15, math.ceil(net_dt / globals_tickinterval()) + 1)
+
+    -- Network-aware forward prediction (2D + gravity) with neck/torso fallback + simple collision/ladder handling
+    local dt = ticks_to_predict * globals_tickinterval()
+    local predicted_origin = get_hitbox_center(entity_index, 0)
+    -- horizontal (lerp 2D for smoother anticipation)
+    predicted_origin.x = predicted_origin.x + velocity.x * dt * 0.9
+    predicted_origin.y = predicted_origin.y + velocity.y * dt * 0.9
+    -- vertical with simple gravity compensation (slightly conservative)
+    local flags = entity_get_prop(entity_index, 'm_fFlags') or 0
+    local on_ladder = bit.band(flags, 0x40) == 0x40
+    local vz = velocity.z
+    if not on_ladder then
+        vz = vz - physics_constants.gravity * dt * 0.45
+    end
+    predicted_origin.z = predicted_origin.z + vz * dt
+    -- basic collision-aware nudge: if direct center blocked, nudge to best visible face point
+    do
+        local e1, e2, e3 = client.eye_position()
+        local ex1, ey1, ez1 = (type(e1) == 'number') and e1 or (e1 and e1[1]), (type(e1) == 'number') and e2 or (e1 and e1[2]), (type(e1) == 'number') and e3 or (e1 and e1[3])
+        if ex1 and predicted_origin then
+            local bbox = get_hitbox_bbox_via_studio and get_hitbox_bbox_via_studio(entity_index, 0)
+            local best_p, best_f = predicted_origin, 0
+            local pts = bbox and { {x=bbox.center.x,y=bbox.center.y,z=bbox.center.z}, {x=bbox.mins.x,y=bbox.center.y,z=bbox.center.z}, {x=bbox.maxs.x,y=bbox.center.y,z=bbox.center.z} } or get_hitbox_face_points(entity_index, 0)
+            for _, p in ipairs(pts) do
+                local ok, trb = pcall(function()
+                    return client.trace_bullet(entity_get_local_player(), ex1, ey1, ez1, p.x, p.y, p.z, entity_index)
+                end)
+                local frac = (ok and trb and trb.fraction) or 0
+                if frac > best_f then best_f, best_p = frac, p end
+            end
+            if best_f < 0.3 then
+                local chest_pts = get_hitbox_face_points(entity_index, 5)
+                for _, p in ipairs(chest_pts) do
+                    local ok, trb = pcall(function()
+                        return client.trace_bullet(entity_get_local_player(), ex1, ey1, ez1, p.x, p.y, p.z, entity_index)
+                    end)
+                    local frac = (ok and trb and trb.fraction) or 0
+                    if frac > best_f then best_f, best_p = frac, p end
+                end
+            end
+            if best_p then
+                local pull = (avg_latency > 0.07) and 0.35 or 0.22
+                predicted_origin.x = predicted_origin.x + (best_p.x - predicted_origin.x) * pull
+                predicted_origin.y = predicted_origin.y + (best_p.y - predicted_origin.y) * pull
+                predicted_origin.z = predicted_origin.z + (best_p.z - predicted_origin.z) * pull
+            end
+        end
+    end
     
-    -- Simple forward prediction
-    local predicted_origin = vector_new(current_record.origin)
-    predicted_origin.x = predicted_origin.x + (velocity.x * ticks_to_predict * globals_tickinterval())
-    predicted_origin.y = predicted_origin.y + (velocity.y * ticks_to_predict * globals_tickinterval())
-    predicted_origin.z = predicted_origin.z + (velocity.z * ticks_to_predict * globals_tickinterval())
+        -- Visibility-aware correction: nudge towards nearest visible point
+    -- Normalize eye position (API may return numbers or table)
+    local e1, e2, e3 = client.eye_position()
+    local ex1, ey1, ez1
+    if type(e1) == "number" and type(e2) == "number" and type(e3) == "number" then
+        ex1, ey1, ez1 = e1, e2, e3
+    elseif type(e1) == "table" and e1[1] and e1[2] and e1[3] then
+        ex1, ey1, ez1 = e1[1], e1[2], e1[3]
+    end
+
+    if ex1 and predicted_origin then
+        -- Check multiple face points: head then chest (fallback)
+        local function best_face_point_for(hitbox_id)
+            local best_p, best_f = predicted_origin, 0
+            local pts = get_hitbox_face_points(entity_index, hitbox_id)
+            for _, p in ipairs(pts) do
+                local tr = client.trace_line(ex1, ey1, ez1, p.x, p.y, p.z, entity_index)
+                local f = (type(tr) == 'number') and tr or ((tr and tr.fraction) or 1)
+                if f > best_f then best_f, best_p = f, p end
+            end
+            return best_p, best_f
+        end
+        local best_p, best_f = best_face_point_for(0)
+        if best_f < 0.6 then
+            local chest_p, chest_f = best_face_point_for(5)
+            if chest_f > best_f then best_p, best_f = chest_p, chest_f end
+        end
+        -- stronger pull at high ping
+        local pull_base = avg_latency and (avg_latency > 0.07 and 10 or 8) or 8
+        if best_f < 0.95 then
+            local pull = (1 - best_f) * pull_base
+            local to_eye = vec_normalize({x = ex1 - best_p.x, y = ey1 - best_p.y, z = ez1 - best_p.z})
+            predicted_origin = vec_add(best_p, vec_scale(to_eye, pull))
+        else
+            predicted_origin = best_p
+        end
+    end
     
+    -- === HITBOX MATRIX INTEGRATION FOR LC PREDICTION ===
+    -- Интеграция системы матрицы хитбоксов для улучшения предсказания в LC
+    local matrix_enhanced_origin = predicted_origin
+    local matrix_confidence = 0.5
+    
+    -- Автоматически включено для максимальной производительности
+    do
+        local matrix_resolution = integrate_hitbox_matrix_resolving(
+            entity_index, 
+            0, -- Базовый десинк для LC
+            math_max(0.5, 1.0 - choke * 0.5), -- Базовая уверенность
+            0 -- Голова по умолчанию
+        )
+        
+        if matrix_resolution and matrix_resolution.matrix_analysis then
+            -- Применяем коррекцию от матрицы хитбоксов к предсказанной позиции
+            local matrix_correction = matrix_resolution.desync
+            local correction_factor = math.min(0.4, matrix_resolution.confidence * 0.6)
+            
+            if matrix_correction > 0 then
+                -- Корректируем позицию на основе анализа матрицы хитбоксов
+                matrix_enhanced_origin = {
+                    x = predicted_origin.x + (matrix_correction * correction_factor),
+                    y = predicted_origin.y + (matrix_correction * correction_factor),
+                    z = predicted_origin.z
+                }
+                
+                matrix_confidence = math.min(1.0, matrix_resolution.confidence + 0.1)
+                
+                -- Debug логирование для матрицы хитбоксов в LC
+                if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format(
+                        "[LC-MATRIX] Entity: %s | Matrix Correction: %.2f | Confidence: %.2f",
+                        player_name,
+                        matrix_correction,
+                        matrix_resolution.confidence
+                    ))
+                end
+            end
+        end
+    end
+    
+    local tick_dt = math.max(globals_tickinterval(), dt)
     return {
-        origin = predicted_origin,
+        origin = matrix_enhanced_origin,
         angles = current_record.angles,
         velocity = velocity,
-        simulation_time = current_record.simulation_time + (ticks_to_predict * globals_tickinterval()),
-        ticks_predicted = ticks_to_predict,
-        confidence = 0.7
-         }
- end
+        simulation_time = current_record.simulation_time + tick_dt,
+        ticks_predicted = math.ceil(dt / globals_tickinterval()),
+        confidence = math_max(matrix_confidence, 1.0 - choke * 0.5),
+        hitbox_matrix_enhanced = matrix_enhanced_origin ~= predicted_origin,
+        matrix_correction = matrix_enhanced_origin ~= predicted_origin and 
+            (matrix_enhanced_origin.x - predicted_origin.x) or 0
+    }
+end
 
 -- === ENHANCED ENEMY ANTIAIM RESOLVER ===
 local function resolve_enemy_antiaim(entity_index)
@@ -5776,17 +9594,75 @@ local function resolve_enemy_antiaim(entity_index)
     -- Update lag records
     update_lag_records(entity_index)
     
+    -- Prefer last valid record for resolver if current looks invalid (defensive AA)
+    local current_record = lag_records[entity_index] and lag_records[entity_index][1]
+    local last_valid = player_data[entity_index] and player_data[entity_index].last_valid_record
+    if current_record and current_record.validity and current_record.validity.valid == false and last_valid then
+        -- Temporarily replace top record for resolution
+        lag_records[entity_index][1] = last_valid
+    end
+
     -- Get AISetpos resolution
     local aisetpos_yaw = resolve_aisetpos(entity_index)
+
+    -- Immediately apply resolved yaw to entity to ensure resolver takes effect even without backtrack apply
+    if aisetpos_yaw and aisetpos_yaw ~= 0 then
+        local base_pitch = entity_get_prop(entity_index, "m_angEyeAngles[0]") or entity_get_prop(entity_index, "m_angEyeAngles", 0) or 0
+        pcall(function()
+            entity_set_prop(entity_index, "m_angEyeAngles[0]", base_pitch)
+            entity_set_prop(entity_index, "m_angEyeAngles[1]", normalize_angle_safe(aisetpos_yaw))
+        end)
+    end
+
+    -- Restore current record if we swapped
+    if last_valid and lag_records[entity_index] and lag_records[entity_index][1] ~= current_record then
+        lag_records[entity_index][1] = current_record
+    end
     
     -- Get LC prediction
     local lc_prediction = resolve_lc_prediction(entity_index)
     
-    return {
+    -- === HITBOX MATRIX INTEGRATION FOR ENEMY ANTIAIM ===
+    -- Интеграция системы матрицы хитбоксов для улучшения резольвинга вражеского антиаима
+    local matrix_enhanced_resolution = {
         aisetpos_yaw = aisetpos_yaw,
         lc_prediction = lc_prediction,
-        entity_index = entity_index
-         }
+        entity_index = entity_index,
+        hitbox_matrix_enabled = hitbox_matrix_resolving and hitbox_matrix_resolving.get() or false
+    }
+    
+    -- Автоматически включено для максимальной производительности
+    do
+        -- Анализируем качество резольвинга через матрицу хитбоксов
+        local matrix_analysis = integrate_hitbox_matrix_resolving(
+            entity_index, 
+            0, -- Базовый десинк
+            0.7, -- Базовая уверенность
+            0 -- Голова по умолчанию
+        )
+        
+        if matrix_analysis and matrix_analysis.matrix_analysis then
+            -- Добавляем информацию о матрице в результат
+            matrix_enhanced_resolution.hitbox_matrix_data = {
+                correction = matrix_analysis.desync,
+                confidence = matrix_analysis.confidence,
+                prediction = matrix_analysis.prediction,
+                timestamp = globals.curtime()
+            }
+            
+                            -- Debug логирование для матрицы хитбоксов в Enemy Antiaim
+                if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format(
+                    "[ENEMY-AA-MATRIX] Entity: %s | Matrix Analysis: %.2f | Confidence: %.2f",
+                    entity_get_player_name(entity_index) or "Unknown",
+                    matrix_analysis.desync,
+                    matrix_analysis.confidence
+                ))
+            end
+        end
+    end
+    
+    return matrix_enhanced_resolution
  end
 
 -- Enhanced Event handlers with Machine Learning Integration
@@ -5797,13 +9673,13 @@ local function on_player_hurt(e)
     
     if attacker_id == local_player and victim_id ~= local_player then
         if player_data[victim_id] then
-            player_data[victim_id].shots_hit = player_data[victim_id].shots_hit + 1
-            local hit_ratio = player_data[victim_id].shots_hit / math.max(player_data[victim_id].shots_fired, 1)
+            player_data[victim_id].shots_hit = (player_data[victim_id].shots_hit or 0) + 1
+            local hit_ratio = player_data[victim_id].shots_hit / math.max(player_data[victim_id].shots_fired or 0, 1)
             local player_name = entity_get_player_name(victim_id)
-            
-            debug_log(string.format(
+
+# debug_log(string.format(
                 "[RESOLVER HIT] Player: %s | Hit Ratio: %.2f%% | Shots: %d/%d",
-                player_name or "Unknown", hit_ratio * 100, player_data[victim_id].shots_hit, player_data[victim_id].shots_fired
+                player_name or "Unknown", hit_ratio * 100, player_data[victim_id].shots_hit, player_data[victim_id].shots_fired or 0
             ))
         end
     end
@@ -5818,7 +9694,7 @@ local function on_weapon_fire(e)
         -- Track shots fired at resolved players
         for entity_index, data in pairs(player_data) do
             if entity_is_alive(entity_index) and entity_is_enemy(entity_index) then
-                data.shots_fired = data.shots_fired + 1
+                data.shots_fired = (data.shots_fired or 0) + 1
             end
         end
     end
@@ -5828,8 +9704,97 @@ local function on_round_start()
     -- Reset all player data
     player_data = {}
     lag_records = {}
-    debug_logs = {}
-    debug_log("[RESOLVER] Round start - Data reset")
+# debug_logs = {}
+# debug_log("[RESOLVER] Round start - Data reset")
+end
+
+-- Safe hitbox center (fallbacks to origin + 64 for head)
+local function get_hitbox_center(entity_index, hitbox_id)
+    hitbox_id = hitbox_id or 0
+    -- Prefer exact bbox center via studiohdr when available
+    local bbox = get_hitbox_bbox_via_studio and get_hitbox_bbox_via_studio(entity_index, hitbox_id)
+    if bbox and bbox.center then
+        return {x = bbox.center.x, y = bbox.center.y, z = bbox.center.z}
+    end
+    -- Fast path via API
+    if entity.hitbox_position then
+        local ok, x, y, z = pcall(entity.hitbox_position, entity_index, hitbox_id)
+        if ok and x then
+            return {x = x, y = y, z = z}
+        end
+    end
+    -- Try bones (approx) via vtable SetupBones
+    local bones = get_bones_cached(entity_index)
+    if bones and bones[0] then
+        for _, b in ipairs({8, 7, 6}) do
+            local mat = bones[b]
+            if mat then
+                local cx = mat[0][3]
+                local cy = mat[1][3]
+                local cz = mat[2][3]
+                if cx ~= 0 or cy ~= 0 or cz ~= 0 then
+                    return {x = cx, y = cy, z = cz}
+                end
+            end
+        end
+    end
+    -- Fallback
+    local ox, oy, oz = entity_get_origin(entity_index)
+    return {x = ox or 0, y = oy or 0, z = (oz or 0) + (hitbox_id == 0 and 64 or 48)}
+end
+
+_G.get_hitbox_center = _G.get_hitbox_center or get_hitbox_center
+
+-- Hitbox face points (prefer studiohdr bbox faces; fallback to bone basis)
+local function get_hitbox_face_points(entity_index, hitbox_id)
+    hitbox_id = hitbox_id or 0
+    local bbox = get_hitbox_bbox_via_studio and get_hitbox_bbox_via_studio(entity_index, hitbox_id)
+    if bbox and bbox.mins and bbox.maxs and bbox.center then
+        local cx, cy, cz = bbox.center.x, bbox.center.y, bbox.center.z
+        local mx, my, mz = bbox.mins.x, bbox.mins.y, bbox.mins.z
+        local Mx, My, Mz = bbox.maxs.x, bbox.maxs.y, bbox.maxs.z
+        return {
+            {x=cx,y=cy,z=cz},
+            {x=mx,y=cy,z=cz},{x=Mx,y=cy,z=cz},
+            {x=cx,y=my,z=cz},{x=cx,y=My,z=cz},
+            {x=cx,y=cy,z=mz},{x=cx,y=cy,z=Mz},
+            {x=mx,y=my,z=cz},{x=Mx,y=My,z=cz},{x=mx,y=My,z=cz},{x=Mx,y=my,z=cz}
+        }
+    end
+    -- fallback: bone basis
+    local center = get_hitbox_center(entity_index, hitbox_id)
+    local points = {}
+    local bones = get_bones_cached and get_bones_cached(entity_index) or nil
+    local mat
+    if bones and bones[0] then
+        for _, b in ipairs({8,7,6}) do
+            if bones[b] then mat = bones[b]; break end
+        end
+    end
+    local right, forward, up
+    if mat then
+        right   = {x = mat[0][0], y = mat[1][0], z = mat[2][0]}
+        forward = {x = mat[0][1], y = mat[1][1], z = mat[2][1]}
+        up      = {x = mat[0][2], y = mat[1][2], z = mat[2][2]}
+    else
+        right, forward, up = {x=1,y=0,z=0}, {x=0,y=1,z=0}, {x=0,y=0,z=1}
+    end
+    local ex, ey, ez = 5, 5, 7
+    local function add(p)
+        table.insert(points, p)
+    end
+    add(vec_add(center, vec_scale(right,  ex)))
+    add(vec_add(center, vec_scale(right, -ex)))
+    add(vec_add(center, vec_scale(forward,  ey)))
+    add(vec_add(center, vec_scale(forward, -ey)))
+    add(vec_add(center, vec_scale(up,  ez)))
+    add(vec_add(center, vec_scale(up, -ez)))
+    -- corners
+    add(vec_add(center, vec_add(vec_scale(right, ex), vec_scale(up, ez))))
+    add(vec_add(center, vec_add(vec_scale(right,-ex), vec_scale(up, ez))))
+    add(vec_add(center, vec_add(vec_scale(right, ex), vec_scale(up,-ez))))
+    add(vec_add(center, vec_add(vec_scale(right,-ex), vec_scale(up,-ez))))
+    return points
 end
 
 -- Enhanced FOV system for target selection  
@@ -5928,16 +9893,36 @@ local function process_frame()
         end
     end
 end
-
 -- === EVENT REGISTRATION ===
 client.set_event_callback("player_hurt", on_player_hurt)
 client.set_event_callback("weapon_fire", on_weapon_fire)
 client.set_event_callback("round_start", on_round_start)
 client.set_event_callback("paint", process_frame)
 
+-- AIM events: flip resolver side only on resolver miss
+client.set_event_callback("aim_fire", function(e)
+    -- Optionally capture state; keeping minimal per request
+end)
+
+client.set_event_callback("aim_hit", function(e)
+    local ent = e.target or e.target_index
+    if ent and player_data[ent] then
+        player_data[ent].resolver_flip_until = nil
+    end
+end)
+
+client.set_event_callback("aim_miss", function(e)
+    local ent = e.target or e.target_index
+    local reason = e.reason and tostring(e.reason):lower() or ""
+    if ent then
+        player_data[ent] = player_data[ent] or {}
+        if reason == "resolver" then
+            player_data[ent].resolver_flip_until = globals.curtime() + 0.35
+        end
+    end
+end)
 -- === NEURAL NETWORK ENHANCEMENT SYSTEM ===
 -- Встроенная система машинного обучения для улучшения резольвера
-
 local function create_neural_network(config)
     local network = {
         input_size = config.input_size,
@@ -6076,6 +10061,125 @@ local function create_neural_network(config)
     return network
 end
 
+-- === HITBOX MATRIX BACKTRACK ANALYSIS ===
+-- Анализ backtrack записей через hitbox matrix для улучшения точности
+function analyze_backtrack_record_via_hitbox_matrix(entity_index, record)
+    if not entity_index or not record then
+        return nil
+    end
+    
+    if not hitbox_matrix_resolving or not hitbox_matrix_resolving.get() then
+        return nil
+    end
+    
+    local analysis = {
+        confidence = 0,
+        quality_score = 0,
+        hitbox_consistency = 0,
+        matrix_accuracy = 0,
+        prediction_reliability = 0
+    }
+    
+    -- === ANALYZE HITBOX MATRIX CONSISTENCY ===
+    local head_matrix = get_hitbox_matrix_precise(entity_index, 0) -- Head hitbox
+    local chest_matrix = get_hitbox_matrix_precise(entity_index, 5) -- Chest hitbox
+    
+    if head_matrix and chest_matrix then
+        -- Check matrix consistency across different hitboxes
+        local head_center = head_matrix.center
+        local chest_center = chest_matrix.center
+        
+        if head_center and chest_center then
+            -- Calculate expected distance between head and chest
+            local expected_distance = 20.0 -- Approximate head-chest distance
+            local actual_distance = vector_distance(head_center, chest_center)
+            local distance_error = math.abs(actual_distance - expected_distance)
+            
+            -- Score based on anatomical consistency
+            if distance_error < 5 then
+                analysis.hitbox_consistency = 1.0
+            elseif distance_error < 10 then
+                analysis.hitbox_consistency = 0.8
+            elseif distance_error < 15 then
+                analysis.hitbox_consistency = 0.6
+            else
+                analysis.hitbox_consistency = 0.3
+            end
+        end
+    end
+    
+    -- === ANALYZE MATRIX ACCURACY ===
+    if record.origin then
+        local matrix_head_pos = get_hitbox_world_coords(entity_index, 0)
+        if matrix_head_pos then
+            local distance_to_record = vector_distance(record.origin, matrix_head_pos)
+            
+            -- Score based on how well matrix position matches record
+            if distance_to_record < 10 then
+                analysis.matrix_accuracy = 1.0
+            elseif distance_to_record < 25 then
+                analysis.matrix_accuracy = 0.8
+            elseif distance_to_record < 50 then
+                analysis.matrix_accuracy = 0.6
+            else
+                analysis.matrix_accuracy = 0.3
+            end
+        end
+    end
+    
+    -- === ANALYZE PREDICTION RELIABILITY ===
+    if record.velocity then
+        local velocity_mag = vec_len2d(record.velocity)
+        if velocity_mag > 10 then
+            -- Test hitbox matrix prediction
+            local prediction = predict_hitbox_via_matrix(entity_index, 0, 0.1, record.velocity)
+            if prediction and prediction.position then
+                -- Calculate how well prediction matches expected movement
+                local expected_pos = vec_add(record.origin, vec_scale(record.velocity, prediction_horizon))
+                local prediction_error = vector_distance(prediction.position, expected_pos)
+                
+                if prediction_error < 5 then
+                    analysis.prediction_reliability = 1.0
+                elseif prediction_error < 15 then
+                    analysis.prediction_reliability = 0.8
+                elseif prediction_error < 30 then
+                    analysis.prediction_reliability = 0.6
+                else
+                    analysis.prediction_reliability = 0.3
+                end
+            end
+        else
+            -- Static target - high reliability
+            analysis.prediction_reliability = 0.9
+        end
+    end
+    
+    -- === CALCULATE OVERALL CONFIDENCE ===
+    analysis.confidence = (
+        analysis.hitbox_consistency * 0.4 +
+        analysis.matrix_accuracy * 0.35 +
+        analysis.prediction_reliability * 0.25
+    )
+    
+    -- === CALCULATE QUALITY SCORE ===
+    analysis.quality_score = analysis.confidence * 100
+    
+    -- Debug logging
+    if false and hitbox_matrix_debug and hitbox_matrix_debug.get() then
+# debug_log(string.format(
+            "[BT-MATRIX-ANALYSIS] Entity: %s | Confidence: %.2f | Quality: %.0f | Consistency: %.2f | Accuracy: %.2f | Reliability: %.2f",
+            entity_get_player_name(entity_index) or "Unknown",
+            analysis.confidence,
+            analysis.quality_score,
+            analysis.hitbox_consistency,
+            analysis.matrix_accuracy,
+            analysis.prediction_reliability
+        ))
+    end
+    
+    return analysis
+end
+
 -- Enhanced resolver with neural networks
 local enhanced_resolver = {
     neural_networks = {},
@@ -6114,785 +10218,3 @@ local function initialize_player_network(entity_index)
     
     return enhanced_resolver.neural_networks[entity_index]
 end
-
--- Extract features for neural network
-local function extract_neural_features(entity_index)
-    local features = {}
-    local records = lag_records[entity_index] or {}
-    
-    -- Angle history (8 values)
-    for i = 1, 8 do
-        if records[i] and records[i].angles then
-            table.insert(features, normalize_angle_safe(records[i].angles.y) / 180.0)
-        else
-            table.insert(features, 0)
-        end
-    end
-    
-    -- Velocity (3 values)
-    if entity_is_alive(entity_index) then
-        local vel_x, vel_y, vel_z = entity_get_prop(entity_index, "m_vecVelocity")
-        if vel_x then
-            table.insert(features, math.min(1.0, vel_x / 250.0))
-            table.insert(features, math.min(1.0, vel_y / 250.0))
-            table.insert(features, math.min(1.0, vel_z / 250.0))
-        else
-            table.insert(features, 0)
-            table.insert(features, 0)
-            table.insert(features, 0)
-        end
-    else
-        table.insert(features, 0)
-        table.insert(features, 0)
-        table.insert(features, 0)
-    end
-    
-    -- Timing and network (4 values)
-    local current_time = globals.curtime()
-    table.insert(features, (current_time % 1.0))
-    table.insert(features, (globals.tickcount() % 64) / 64.0)
-    table.insert(features, globals.frametime() * 100)
-    table.insert(features, math.sin(current_time * 2))
-    
-    return features
-end
-
--- Enhanced cubic spline interpolation
-local function cubic_spline_interpolation(points, target_time)
-    if #points < 4 then
-        if #points >= 2 then
-            local p1, p2 = points[1], points[2]
-            local dt = p2.timestamp - p1.timestamp
-            if dt > 0 then
-                local t = (target_time - p1.timestamp) / dt
-                return {
-                    x = p1.x + (p2.x - p1.x) * t,
-                    y = p1.y + (p2.y - p1.y) * t,
-                    z = p1.z + (p2.z - p1.z) * t,
-                    timestamp = target_time
-                }
-            end
-        end
-        return points[1] or {x = 0, y = 0, z = 0, timestamp = target_time}
-    end
-    
-    table.sort(points, function(a, b) return a.timestamp < b.timestamp end)
-    
-    local segment_idx = 1
-    for i = 1, #points - 1 do
-        if target_time >= points[i].timestamp and target_time <= points[i + 1].timestamp then
-            segment_idx = i
-            break
-        end
-    end
-    
-    local p0, p1, p2, p3
-    if segment_idx == 1 then
-        p0, p1, p2, p3 = points[1], points[1], points[2], points[3]
-    elseif segment_idx >= #points - 1 then
-        p0, p1, p2, p3 = points[#points - 2], points[#points - 1], points[#points], points[#points]
-    else
-        p0, p1, p2, p3 = points[segment_idx - 1], points[segment_idx], points[segment_idx + 1], points[segment_idx + 2]
-    end
-    
-    local t = (target_time - p1.timestamp) / (p2.timestamp - p1.timestamp)
-    local t2 = t * t
-    local t3 = t2 * t
-    
-    local q0 = -t3 + 2 * t2 - t
-    local q1 = 3 * t3 - 5 * t2 + 2
-    local q2 = -3 * t3 + 4 * t2 + t
-    local q3 = t3 - t2
-    
-    return {
-        x = 0.5 * (p0.x * q0 + p1.x * q1 + p2.x * q2 + p3.x * q3),
-        y = 0.5 * (p0.y * q0 + p1.y * q1 + p2.y * q2 + p3.y * q3),
-        z = 0.5 * (p0.z * q0 + p1.z * q1 + p2.z * q2 + p3.z * q3),
-        timestamp = target_time
-    }
-end
-
--- Advanced movement pattern analysis
-local function analyze_movement_pattern(records)
-    if #records < 3 then
-        return {type = "static", variance = 0, confidence = 0.5}
-    end
-    
-    local speeds = {}
-    local direction_changes = 0
-    local avg_speed = 0
-    
-    for i = 1, #records - 1 do
-        if records[i] and records[i+1] and records[i].origin and records[i+1].origin then
-            local dx = records[i].origin.x - records[i+1].origin.x
-            local dy = records[i].origin.y - records[i+1].origin.y
-            local dz = records[i].origin.z - records[i+1].origin.z
-            local speed = math.sqrt(dx*dx + dy*dy + dz*dz)
-            table.insert(speeds, speed)
-            avg_speed = avg_speed + speed
-            
-            if i > 1 then
-                local prev_dx = records[i-1].origin.x - records[i].origin.x
-                local prev_dy = records[i-1].origin.y - records[i].origin.y
-                local dot_product = dx * prev_dx + dy * prev_dy
-                if dot_product < 0 then
-                    direction_changes = direction_changes + 1
-                end
-            end
-        end
-    end
-    
-    if #speeds == 0 then
-        return {type = "static", variance = 0, confidence = 0.9}
-    end
-    
-    avg_speed = avg_speed / #speeds
-    
-    local variance = 0
-    for _, speed in ipairs(speeds) do
-        variance = variance + (speed - avg_speed) * (speed - avg_speed)
-    end
-    variance = variance / #speeds
-    
-    local movement_type = "static"
-    local confidence = 0.5
-    
-    if avg_speed < 5 then
-        movement_type = "static"
-        confidence = 0.95
-    elseif variance < 25 and direction_changes < 2 then
-        movement_type = "linear"
-        confidence = 0.85
-    elseif direction_changes > (#records / 3) then
-        movement_type = "chaotic"
-        confidence = 0.65
-    else
-        movement_type = "normal"
-        confidence = 0.75
-    end
-    
-    return {
-        type = movement_type,
-        variance = variance,
-        confidence = confidence,
-        avg_speed = avg_speed,
-        direction_changes = direction_changes
-    }
-end
-
-
-
--- Enhanced neural network resolver with pattern analysis
-local function neural_resolve_aisetpos(entity_index)
-    if not entity_is_alive(entity_index) or not entity_is_enemy(entity_index) then
-        return 0
-    end
-    
-    local records = lag_records[entity_index]
-    if not records or #records < 3 then return 0 end
-    
-    local network = initialize_player_network(entity_index)
-    local features = extract_neural_features(entity_index)
-    
-    if #features < 15 then return 0 end
-    
-    -- Analyze movement and desync patterns
-    local movement_analysis = analyze_movement_pattern(records)
-    local desync_pattern = detect_desync_pattern(entity_index, records)
-    
-    -- Get neural network prediction
-    local prediction = network:forward(features)
-    if not prediction or #prediction < 3 then return 0 end
-    
-    local neural_yaw = prediction[1] * 60.0
-    local neural_confidence = math.max(0, math.min(1, prediction[2]))
-    local neural_direction = prediction[3] > 0 and 1 or -1
-    
-    -- Pattern-based correction
-    local pattern_correction = 0
-    local pattern_confidence = desync_pattern.strength
-    
-    if desync_pattern.type == "aggressive_jitter" then
-        pattern_correction = desync_pattern.direction * math.min(45, desync_pattern.avg_change * 0.8)
-    elseif desync_pattern.type == "sided_jitter" then
-        pattern_correction = desync_pattern.direction * math.min(35, desync_pattern.avg_change * 0.7)
-    elseif desync_pattern.type == "micro_jitter" then
-        pattern_correction = desync_pattern.direction * math.min(25, desync_pattern.avg_change * 1.2)
-    elseif desync_pattern.type == "static_fake" then
-        pattern_correction = desync_pattern.direction * 30
-    else
-        pattern_correction = desync_pattern.direction * math.min(30, desync_pattern.avg_change * 0.6)
-    end
-    
-    -- Movement-based adjustment
-    local movement_modifier = 1.0
-    if movement_analysis.type == "chaotic" then
-        movement_modifier = 1.3  -- More aggressive for chaotic movement
-    elseif movement_analysis.type == "static" then
-        movement_modifier = 0.8  -- Less aggressive for static targets
-    elseif movement_analysis.type == "linear" then
-        movement_modifier = 1.1  -- Slightly more for predictable movement
-    end
-    
-    -- Combine predictions with weighted confidence
-    local total_confidence = neural_confidence + pattern_confidence
-    local neural_weight = neural_confidence / total_confidence
-    local pattern_weight = pattern_confidence / total_confidence
-    
-    local combined_yaw = (neural_yaw * neural_weight) + (pattern_correction * pattern_weight)
-    combined_yaw = combined_yaw * movement_modifier
-    
-    -- Apply to current angle
-    local current_yaw = 0
-    if records[1] and records[1].angles then
-        current_yaw = records[1].angles.y
-    end
-    
-    local resolved_yaw = current_yaw + combined_yaw
-    
-    -- Add realistic variance with confidence scaling
-    local variance_scale = math.max(0.5, 1.0 - (total_confidence / 2))
-    local variance = (math.random() - 0.5) * 2.0 * variance_scale
-    resolved_yaw = resolved_yaw + variance
-    
-    -- Network latency compensation
-    local network_info = network_channel_system:get_network_info()
-    if network_info then
-        local latency = (network_info.latency.incoming + network_info.latency.outgoing) / 2
-        if latency > 0.05 then  -- >50ms
-            local latency_compensation = math.sin(globals.curtime() * 3 + latency * 10) * (latency * 100)
-            resolved_yaw = resolved_yaw + latency_compensation
-        end
-    end
-    
-    return normalize_angle_safe(resolved_yaw)
-end
-
--- Advanced Kalman filter for position prediction
-local function kalman_filter_predict(measurements, config)
-    config = config or {}
-    local process_noise = config.process_noise or 0.1
-    local measurement_noise = config.measurement_noise or 0.1
-    local initial_uncertainty = config.initial_uncertainty or 1.0
-    
-    if #measurements == 0 then return nil end
-    
-    local state = measurements[1]
-    local uncertainty = initial_uncertainty
-    local velocity = {x = 0, y = 0, z = 0}
-    
-    for i = 2, #measurements do
-        local measurement = measurements[i]
-        local dt = measurement.timestamp - measurements[i-1].timestamp
-        if dt > 0 and dt < 0.5 then  -- Reasonable time delta
-            -- Prediction step
-            local predicted_state = {
-                x = state.x + velocity.x * dt,
-                y = state.y + velocity.y * dt,
-                z = state.z + velocity.z * dt,
-                timestamp = measurement.timestamp
-            }
-            local predicted_uncertainty = uncertainty + process_noise
-            
-            -- Update step
-            local kalman_gain = predicted_uncertainty / (predicted_uncertainty + measurement_noise)
-            state = {
-                x = predicted_state.x + kalman_gain * (measurement.x - predicted_state.x),
-                y = predicted_state.y + kalman_gain * (measurement.y - predicted_state.y),
-                z = predicted_state.z + kalman_gain * (measurement.z - predicted_state.z),
-                timestamp = measurement.timestamp
-            }
-            uncertainty = (1 - kalman_gain) * predicted_uncertainty
-            
-            -- Update velocity estimate
-            if dt > 0 then
-                velocity.x = (state.x - measurements[i-1].x) / dt
-                velocity.y = (state.y - measurements[i-1].y) / dt
-                velocity.z = (state.z - measurements[i-1].z) / dt
-            end
-        end
-    end
-    
-    return {
-        position = state,
-        velocity = velocity,
-        uncertainty = uncertainty
-    }
-end
-
--- Physics-based trajectory prediction
-local function physics_predict_trajectory(points, target_time)
-    if #points < 3 then return points[1] end
-    
-    -- Calculate velocity and acceleration
-    local velocities = {}
-    local accelerations = {}
-    
-    for i = 1, #points - 1 do
-        local dt = points[i].timestamp - points[i+1].timestamp
-        if dt > 0 then
-            local velocity = {
-                x = (points[i].x - points[i+1].x) / dt,
-                y = (points[i].y - points[i+1].y) / dt,
-                z = (points[i].z - points[i+1].z) / dt,
-                timestamp = points[i].timestamp
-            }
-            table.insert(velocities, velocity)
-        end
-    end
-    
-    for i = 1, #velocities - 1 do
-        local dt = velocities[i].timestamp - velocities[i+1].timestamp
-        if dt > 0 then
-            local acceleration = {
-                x = (velocities[i].x - velocities[i+1].x) / dt,
-                y = (velocities[i].y - velocities[i+1].y) / dt,
-                z = (velocities[i].z - velocities[i+1].z) / dt
-            }
-            table.insert(accelerations, acceleration)
-        end
-    end
-    
-    if #velocities == 0 then return points[1] end
-    
-    -- Use latest velocity and acceleration for prediction
-    local latest_velocity = velocities[1]
-    local latest_acceleration = accelerations[1] or {x = 0, y = 0, z = 0}
-    
-    local dt = target_time - points[1].timestamp
-    
-    -- Apply physics: position = p0 + v*t + 0.5*a*t^2
-    local predicted = {
-        x = points[1].x + latest_velocity.x * dt + 0.5 * latest_acceleration.x * dt * dt,
-        y = points[1].y + latest_velocity.y * dt + 0.5 * latest_acceleration.y * dt * dt,
-        z = points[1].z + latest_velocity.z * dt + 0.5 * latest_acceleration.z * dt * dt,
-        timestamp = target_time
-    }
-    
-    return predicted
-end
-
--- Adaptive interpolation method selection
-local function adaptive_interpolation(points, target_time)
-    if #points < 2 then return points[1] end
-    
-    local movement_analysis = analyze_movement_pattern(points)
-    
-    -- Choose interpolation method based on movement type
-    if movement_analysis.type == "static" then
-        -- For static targets, use last known position
-        return points[1]
-    elseif movement_analysis.type == "linear" and movement_analysis.confidence > 0.8 then
-        -- For linear movement, use simple extrapolation
-        if #points >= 2 then
-            local p1, p2 = points[1], points[2]
-            local dt = p1.timestamp - p2.timestamp
-            if dt > 0 then
-                local prediction_dt = target_time - p1.timestamp
-                return {
-                    x = p1.x + ((p1.x - p2.x) / dt) * prediction_dt,
-                    y = p1.y + ((p1.y - p2.y) / dt) * prediction_dt,
-                    z = p1.z + ((p1.z - p2.z) / dt) * prediction_dt,
-                    timestamp = target_time
-                }
-            end
-        end
-    elseif movement_analysis.type == "chaotic" or movement_analysis.variance > 50 then
-        -- For chaotic movement, use Kalman filter
-        local kalman_result = kalman_filter_predict(points, {
-            process_noise = 0.2,
-            measurement_noise = 0.1,
-            initial_uncertainty = 2.0
-        })
-        if kalman_result then
-            local dt = target_time - points[1].timestamp
-            return {
-                x = kalman_result.position.x + kalman_result.velocity.x * dt,
-                y = kalman_result.position.y + kalman_result.velocity.y * dt,
-                z = kalman_result.position.z + kalman_result.velocity.z * dt,
-                timestamp = target_time
-            }
-        end
-    else
-        -- For normal movement, use physics prediction
-        return physics_predict_trajectory(points, target_time)
-    end
-    
-    -- Fallback to cubic spline
-    return cubic_spline_interpolation(points, target_time)
-end
-
--- Enhanced LC prediction with multiple interpolation methods
-local function enhanced_lc_prediction(entity_index)
-    local records = lag_records[entity_index]
-    if not records or #records < 3 then return nil end
-    
-    -- Get network latency for prediction timing
-    local network_info = network_channel_system:get_network_info()
-    local current_latency = 0.025
-    if network_info then
-        current_latency = (network_info.latency.incoming + network_info.latency.outgoing) / 2
-    end
-    
-    local ticks_to_predict = math.min(15, math.ceil(current_latency / globals.tickinterval()) + 3)
-    local target_time = globals.curtime() + (ticks_to_predict * globals.tickinterval())
-    
-    -- Prepare trajectory points with velocity
-    local trajectory_points = {}
-    for i = 1, math.min(8, #records) do
-        if records[i] and records[i].origin then
-            local point = {
-                x = records[i].origin.x,
-                y = records[i].origin.y,
-                z = records[i].origin.z,
-                timestamp = records[i].simulation_time or globals.curtime() - i * globals.tickinterval()
-            }
-            table.insert(trajectory_points, point)
-        end
-    end
-    
-    if #trajectory_points < 2 then return nil end
-    
-    -- Get current velocity from entity
-    local current_velocity = {x = 0, y = 0, z = 0}
-    if entity_is_alive(entity_index) then
-        local vel_x, vel_y, vel_z = entity_get_prop(entity_index, "m_vecVelocity")
-        if vel_x then
-            current_velocity = {x = vel_x, y = vel_y, z = vel_z}
-        end
-    end
-    
-    -- Use adaptive interpolation
-    local predicted_position = adaptive_interpolation(trajectory_points, target_time)
-    
-    -- Apply velocity correction for high-speed targets
-    local speed = math.sqrt(current_velocity.x^2 + current_velocity.y^2 + current_velocity.z^2)
-    if speed > 100 then  -- High speed movement
-        local velocity_dt = target_time - trajectory_points[1].timestamp
-        predicted_position.x = predicted_position.x + current_velocity.x * velocity_dt * 0.3
-        predicted_position.y = predicted_position.y + current_velocity.y * velocity_dt * 0.3
-        predicted_position.z = predicted_position.z + current_velocity.z * velocity_dt * 0.3
-    end
-    
-    -- Network quality adjustment
-    local confidence = 0.8
-    if network_info then
-        local network_quality = 1.0
-        if network_info.packet_loss then
-            network_quality = network_quality - (network_info.packet_loss.incoming * 5)
-        end
-        if current_latency > 0.08 then  -- >80ms
-            network_quality = network_quality - ((current_latency - 0.08) * 3)
-        end
-        confidence = confidence * math.max(0.3, network_quality)
-    end
-    
-    -- Angle prediction with desync compensation
-    local predicted_angles = records[1] and records[1].angles or {x = 0, y = 0, z = 0}
-    if #records >= 3 then
-        -- Simple angle extrapolation
-        local angle_delta = normalize_angle_safe(records[1].angles.y - records[2].angles.y)
-        predicted_angles.y = records[1].angles.y + angle_delta * (ticks_to_predict * 0.7)
-        predicted_angles.y = normalize_angle_safe(predicted_angles.y)
-    end
-    
-    return {
-        origin = predicted_position,
-        angles = predicted_angles,
-        velocity = current_velocity,
-        simulation_time = target_time,
-        ticks_predicted = ticks_to_predict,
-        confidence = confidence,
-        interpolation_method = "adaptive",
-        network_quality = network_info and 1.0 or 0.5
-    }
-end
-
--- Learning from shot results
-local function learn_from_shot_result(entity_index, shot_hit, predicted_yaw)
-    local metrics = enhanced_resolver.performance_metrics[entity_index]
-    if not metrics then return end
-    
-    metrics.shots_fired = metrics.shots_fired + 1
-    if shot_hit then
-        metrics.shots_hit = metrics.shots_hit + 1
-    end
-    
-    metrics.accuracy = metrics.shots_hit / metrics.shots_fired
-    metrics.last_update = globals.curtime()
-    
-    if metrics.accuracy > 0.8 then
-        metrics.learning_rate_adaptive = math.max(0.0001, metrics.learning_rate_adaptive * 0.95)
-    elseif metrics.accuracy < 0.4 then
-        metrics.learning_rate_adaptive = math.min(0.01, metrics.learning_rate_adaptive * 1.05)
-    end
-    
-    if metrics.shots_fired >= 3 then
-        local network = enhanced_resolver.neural_networks[entity_index]
-        if network then
-            local features = extract_neural_features(entity_index)
-            if #features >= 15 then
-                local target = {
-                    predicted_yaw / 60.0,
-                    shot_hit and 1.0 or 0.2,
-                    predicted_yaw > 0 and 1.0 or -1.0
-                }
-                
-                network.learning_rate = metrics.learning_rate_adaptive
-                network:train(features, target)
-            end
-        end
-    end
-end
-
--- Memory cleanup
-local function cleanup_memory()
-    local current_time = globals.curtime()
-    
-    if current_time - enhanced_resolver.last_cleanup_time < 30 then
-        return
-    end
-    
-    enhanced_resolver.last_cleanup_time = current_time
-    
-    for entity_index, metrics in pairs(enhanced_resolver.performance_metrics) do
-        if not entity_is_alive(entity_index) and (current_time - metrics.last_update) > 60 then
-            enhanced_resolver.neural_networks[entity_index] = nil
-            enhanced_resolver.performance_metrics[entity_index] = nil
-            enhanced_resolver.learning_history[entity_index] = nil
-        end
-    end
-    
-    collectgarbage("collect")
-end
-
--- === ENHANCED RESOLVE_AISETPOS OVERRIDE ===
-local original_resolve_aisetpos = resolve_aisetpos
-
-function resolve_aisetpos(entity_index)
-    cleanup_memory()
-    
-    -- Early validation
-    if not entity_is_alive(entity_index) or not entity_is_enemy(entity_index) then
-        return 0
-    end
-    
-    local records = lag_records[entity_index]
-    if not records or #records < 2 then
-        return original_resolve_aisetpos(entity_index)
-    end
-    
-    -- Multi-method resolver approach
-    local resolver_results = {}
-    
-    -- 1. Neural network prediction
-    local success, neural_result = pcall(neural_resolve_aisetpos, entity_index)
-    if success and neural_result and neural_result ~= 0 then
-        table.insert(resolver_results, {
-            yaw = neural_result,
-            confidence = 0.8,
-            weight = 0.4,
-            method = "neural"
-        })
-    end
-    
-    -- 2. Original VENUS resolver (wide jitter detection)
-    local success, original_result = pcall(original_resolve_aisetpos, entity_index)
-    if success and original_result and original_result ~= 0 then
-        table.insert(resolver_results, {
-            yaw = original_result,
-            confidence = 0.7,
-            weight = 0.3,
-            method = "wide_jitter"
-        })
-    end
-    
-    -- 3. Pattern-based desync analysis
-    local success, desync_pattern = pcall(detect_desync_pattern, entity_index, records)
-    if success and desync_pattern and desync_pattern.strength > 0.3 then
-        local current_yaw = records[1] and records[1].angles and records[1].angles.y or 0
-        local pattern_yaw = current_yaw + (desync_pattern.direction * desync_pattern.avg_change * 0.8)
-        table.insert(resolver_results, {
-            yaw = normalize_angle_safe(pattern_yaw),
-            confidence = desync_pattern.strength,
-            weight = 0.2,
-            method = "pattern"
-        })
-    end
-    
-    -- 4. Statistical history analysis
-    local player_data_entry = player_data[entity_index]
-    if player_data_entry and player_data_entry.yaw_history and #player_data_entry.yaw_history > 3 then
-        local recent_angles = {}
-        for i = 1, math.min(5, #player_data_entry.yaw_history) do
-            table.insert(recent_angles, player_data_entry.yaw_history[i])
-        end
-        
-        -- Calculate weighted average with recent bias
-        local weighted_sum = 0
-        local weight_sum = 0
-        for i, angle in ipairs(recent_angles) do
-            local weight = 1.0 / i  -- More recent angles have higher weight
-            weighted_sum = weighted_sum + angle * weight
-            weight_sum = weight_sum + weight
-        end
-        
-        if weight_sum > 0 then
-            table.insert(resolver_results, {
-                yaw = normalize_angle_safe(weighted_sum / weight_sum),
-                confidence = 0.6,
-                weight = 0.1,
-                method = "statistical"
-            })
-        end
-    end
-    
-    -- Ensemble combination
-    if #resolver_results == 0 then
-        return original_resolve_aisetpos(entity_index)
-    end
-    
-    -- Network quality adjustment
-    local network_info = network_channel_system:get_network_info()
-    local network_quality = 1.0
-    if network_info then
-        local latency = (network_info.latency.incoming + network_info.latency.outgoing) / 2
-        if latency > 0.1 then
-            network_quality = network_quality * 0.7  -- Reduce confidence for high latency
-        end
-        if network_info.packet_loss and network_info.packet_loss.incoming > 0.02 then
-            network_quality = network_quality * 0.8  -- Reduce confidence for packet loss
-        end
-    end
-    
-
-    -- Weighted ensemble prediction
-    local resolved_yaw = 0 
-    local total_confidence = 0
-    local method_weights = {}
-    
-    for _, result in ipairs(resolver_results) do
-        local effective_confidence = result.confidence * result.weight * network_quality
-        resolved_yaw = resolved_yaw + result.yaw * effective_confidence  -- Используем resolved_yaw
-        total_confidence = total_confidence + effective_confidence
-        method_weights[result.method] = (method_weights[result.method] or 0) + effective_confidence
-    end
-    
-    if total_confidence > 0 then
-        resolved_yaw = resolved_yaw / total_confidence  -- Используем resolved_yaw
-    else
-        return original_resolve_aisetpos(entity_index)
-    end
-    
-    -- Adaptive confidence scaling based on player performance
-    local metrics = enhanced_resolver.performance_metrics[entity_index]
-    if metrics and metrics.shots_fired > 5 then
-        local accuracy_modifier = 1.0
-        if metrics.accuracy > 0.7 then
-            accuracy_modifier = 1.1
-        elseif metrics.accuracy < 0.3 then
-            accuracy_modifier = 0.9
-        end
-        
-        -- Apply small variance based on accuracy
-        local variance = (math.random() - 0.5) * 3.0 * (1.0 - metrics.accuracy)
-        resolved_yaw = resolved_yaw + variance  -- Используем resolved_yaw
-    end
-    
-    -- Anti-detection variance
-    local time_variance = math.sin(globals.curtime() * 1.7 + entity_index) * 1.5
-    resolved_yaw = resolved_yaw + time_variance  -- Используем resolved_yaw
-    
-    return normalize_angle_safe(resolved_yaw)  -- Возвращаем resolved_yaw
-end
-
--- === ENHANCED RESOLVE_LC_PREDICTION OVERRIDE ===
-local original_resolve_lc_prediction = resolve_lc_prediction
-
-function resolve_lc_prediction(entity_index)
-    local success, enhanced_result = pcall(enhanced_lc_prediction, entity_index)
-    
-    if success and enhanced_result then
-        return enhanced_result
-    else
-        return original_resolve_lc_prediction(entity_index)
-    end
-end
-
--- === ENHANCED EVENT HANDLERS ===
-local original_on_player_hurt = on_player_hurt
-
-function on_player_hurt(e)
-    original_on_player_hurt(e)
-    
-    local victim_id = client_userid_to_entindex(e.userid)
-    local attacker_id = client_userid_to_entindex(e.attacker)
-    local local_player = entity_get_local_player()
-    
-    if attacker_id == local_player and victim_id ~= local_player then
-        local records = lag_records[victim_id]
-        if records and records[1] and records[1].angles then
-            learn_from_shot_result(victim_id, true, records[1].angles.y)
-        end
-    end
-end
-
-local shot_tracking = {}
-
-local original_on_weapon_fire = on_weapon_fire
-
-function on_weapon_fire(e)
-    original_on_weapon_fire(e)
-    
-    local shooter_id = client_userid_to_entindex(e.userid)
-    local local_player = entity_get_local_player()
-    
-    if shooter_id == local_player then
-        local shot_time = globals.curtime()
-        
-        for i = 1, globals.maxplayers() do
-            if entity_is_alive(i) and entity_is_enemy(i) then
-                local records = lag_records[i]
-                if records and records[1] and records[1].angles then
-                    table.insert(shot_tracking, {
-                        entity_index = i,
-                        predicted_yaw = records[1].angles.y,
-                        shot_time = shot_time,
-                        processed = false
-                    })
-                end
-            end
-        end
-        
-        client.delay_call(0.1, function()
-            for i = #shot_tracking, 1, -1 do
-                local shot = shot_tracking[i]
-                if not shot.processed and (globals.curtime() - shot.shot_time) > 0.05 then
-                    learn_from_shot_result(shot.entity_index, false, shot.predicted_yaw)
-                    shot.processed = true
-                    table.remove(shot_tracking, i)
-                end
-            end
-        end)
-    end
-end
-
-local original_on_round_start = on_round_start
-
-function on_round_start()
-    original_on_round_start()
-    shot_tracking = {}
-    
-    for entity_index, metrics in pairs(enhanced_resolver.performance_metrics) do
-        if metrics.shots_fired > 50 then
-            metrics.shots_fired = math.floor(metrics.shots_fired * 0.8)
-            metrics.shots_hit = math.floor(metrics.shots_hit * 0.8)
-            metrics.accuracy = metrics.shots_hit / metrics.shots_fired
-        end
-    end
-end
-
-debug_log("[ENHANCED-RESOLVER] ✅ All systems loaded successfully with neural networks")
-debug_log("[FEATURES] Network-aware wide jitter detection, Neural networks, Cubic spline interpolation")
-debug_log("[NEURAL] Adaptive learning with 15-input features and 3-layer network")
-debug_log("[STATUS] Ready for next-generation anti-aim resolution")
